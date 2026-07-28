@@ -22,10 +22,10 @@ interface LogoProps {
 }
 
 const sizeMap = {
-  sm: { width: 128, height: 128, text: 'text-2xl' },
-  md: { width: 192, height: 192, text: 'text-4xl' },
-  lg: { width: 256, height: 256, text: 'text-5xl' },
-  xl: { width: 320, height: 320, text: 'text-6xl' },
+  sm: { width: 64, height: 64, text: 'text-2xl' },
+  md: { width: 100, height: 100, text: 'text-3xl' },
+  lg: { width: 128, height: 128, text: 'text-4xl' },
+  xl: { width: 160, height: 160, text: 'text-5xl' },
 };
 
 export function Logo({
