@@ -33,13 +33,8 @@ export default function LandingPage() {
       <main className="pt-32 pb-24 px-6 md:px-8 max-w-7xl mx-auto relative z-10">
         
         {/* Hero Section */}
-        <section className="flex flex-col items-center text-center space-y-8 py-20">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
-            <Sparkles className="w-4 h-4 text-blue-400" />
-            <span className="text-sm font-medium text-white/80">The Future of Public Goods</span>
-          </div>
-
-          <h1 className="text-6xl md:text-8xl font-extrabold tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-white/40 leading-tight">
+        <section className="flex flex-col items-center text-center space-y-8 py-12 md:py-20">
+          <h1 className="text-5xl md:text-8xl font-extrabold tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-white/40 leading-tight">
             Fund What <br className="hidden md:block" /> Matters.
           </h1>
           

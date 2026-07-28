@@ -58,33 +58,33 @@ export default function Dashboard() {
             </div>
 
             {/* Navigation Tabs */}
-            <nav className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-2 flex flex-col gap-1">
+            <nav className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-2 flex flex-row md:flex-col gap-1 overflow-x-auto whitespace-nowrap scrollbar-hide">
               <button 
                 onClick={() => setActiveTab("SUBMIT")}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === "SUBMIT" ? "bg-white/10 text-white font-semibold" : "text-white/60 hover:bg-white/5 hover:text-white"}`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all flex-shrink-0 ${activeTab === "SUBMIT" ? "bg-white/10 text-white font-semibold" : "text-white/60 hover:bg-white/5 hover:text-white"}`}
               >
-                <PlusCircle className="w-5 h-5" />
+                <PlusCircle className="w-5 h-5 flex-shrink-0" />
                 Submit Project
               </button>
               <button 
                 onClick={() => setActiveTab("MY_PROJECTS")}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === "MY_PROJECTS" ? "bg-white/10 text-white font-semibold" : "text-white/60 hover:bg-white/5 hover:text-white"}`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all flex-shrink-0 ${activeTab === "MY_PROJECTS" ? "bg-white/10 text-white font-semibold" : "text-white/60 hover:bg-white/5 hover:text-white"}`}
               >
-                <LayoutGrid className="w-5 h-5" />
+                <LayoutGrid className="w-5 h-5 flex-shrink-0" />
                 My Submissions
               </button>
               <button 
                 onClick={() => setActiveTab("GLOBAL")}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === "GLOBAL" ? "bg-white/10 text-white font-semibold" : "text-white/60 hover:bg-white/5 hover:text-white"}`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all flex-shrink-0 ${activeTab === "GLOBAL" ? "bg-white/10 text-white font-semibold" : "text-white/60 hover:bg-white/5 hover:text-white"}`}
               >
-                <Globe className="w-5 h-5" />
+                <Globe className="w-5 h-5 flex-shrink-0" />
                 Global Submissions
               </button>
               <button 
                 onClick={() => setActiveTab("TREASURY")}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === "TREASURY" ? "bg-white/10 text-white font-semibold" : "text-white/60 hover:bg-white/5 hover:text-white"}`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all flex-shrink-0 ${activeTab === "TREASURY" ? "bg-white/10 text-white font-semibold" : "text-white/60 hover:bg-white/5 hover:text-white"}`}
               >
-                <Coins className="w-5 h-5" />
+                <Coins className="w-5 h-5 flex-shrink-0" />
                 Treasury Pool
               </button>
             </nav>
@@ -169,7 +169,7 @@ export default function Dashboard() {
                   
                   <div className="max-w-md mx-auto bg-black/40 rounded-2xl p-6 backdrop-blur-md border border-white/5">
                     <h3 className="text-white font-medium mb-4">Donate to Public Goods</h3>
-                    <div className="flex gap-3">
+                    <div className="flex flex-col sm:flex-row gap-3">
                       <input 
                         type="number" 
                         value={donateAmount}
@@ -184,7 +184,7 @@ export default function Dashboard() {
                           }
                         }}
                         disabled={isDonating || !donateAmount}
-                        className="px-6 py-3 bg-white text-black font-bold rounded-xl disabled:opacity-50 transition-all hover:bg-white/90"
+                        className="px-6 py-3 bg-white text-black font-bold rounded-xl disabled:opacity-50 transition-all hover:bg-white/90 w-full sm:w-auto"
                       >
                         {isDonating ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Donate"}
                       </button>
