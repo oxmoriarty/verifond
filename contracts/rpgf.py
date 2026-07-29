@@ -23,6 +23,9 @@ class Project:
     reason: str
     score: u256
     withdrawn: bool
+    allocated_funds: u256
+    strengths: str
+    weaknesses: str
 
 class RPGF(gl.Contract):
     projects: TreeMap[u256, Project]
@@ -45,14 +48,35 @@ class RPGF(gl.Contract):
     def submit_project(self, name: str, details: str, url: str, amount_requested: u256) -> u256:
         """Evaluates a project using GenLayer AI and stores the result."""
         task = """
-        Evaluate this project based on its contribution to public goods.
-        Valuable Public Goods include open-source software, free educational resources, community infrastructure, or public research.
-        Purely profit-driven, closed-source SaaS products should be penalized.
-        Score from 1 to 10.
-        If score is 5 to 10, set status to 'Approved'. If 1 to 4, set status to 'Rejected'.
-        Provide a brief 'reason' explaining the decision.
+        Evaluate this project submission for Retroactive Public Goods Funding (RPGF).
+        You must evaluate based on 4 criteria:
+        A. Project Description (25%): Clearly explains problem, solution, users, and impact. Reject one-word or generic descriptions.
+        B. Resource Quality (30%): Verify the resource exists, has meaningful content/code, and relates to the project. Reject fake, placeholder, or empty repos.
+        C. Public Goods Impact (25%): Must provide public value (open source, education, research, infra). Penalize purely commercial apps.
+        D. Feasibility and Execution (20%): Must appear realistic with evidence of work.
+        
+        Minimum Requirements (If any fail, set score <= 4 and status 'Rejected'):
+        - Description lacks meaningful info.
+        - Repository/Resource does not exist or is inaccessible.
+        - Repository is empty or only a template.
+        - Resource clearly does not relate to the project.
+
+        Scoring Guide (1-10):
+        0-4: Reject
+        5-7: Approve (meets minimums)
+        8-10: Strong Approval
+        
+        Funding Allocation:
+        Calculate an integer `allocated_funds` between 0 and 10000 based on the score and relative quality.
+        - Score 0-4: 0
+        - Score 5: 25 - 100
+        - Score 6: 101 - 500
+        - Score 7: 501 - 1000
+        - Score 8: 1001 - 2000
+        - Score 9: 2001 - 5000
+        - Score 10: 5001 - 10000
         """
-        criteria = "Must return a valid JSON object with 'score' (integer), 'status' (string 'Approved' or 'Rejected'), and 'reason' (string)."
+        criteria = "Must return a valid JSON object with 'score' (int), 'status' ('Approved' or 'Rejected'), 'reason' (string), 'allocated_funds' (int), 'strengths' (list of strings), 'weaknesses' (list of strings)."
         
         def fetch_data():
             try:
@@ -64,31 +88,61 @@ class RPGF(gl.Contract):
         result = gl.eq_principle.prompt_non_comparative(
             fetch_data,
             task=task,
-            criteria=criteria,
-            response_format='json'
+            criteria=criteria
         )
         
-        # Ensure result is a dict (JSON response)
+        # Robust JSON parsing
         if isinstance(result, str):
+            result = result.strip()
+            if result.startswith("```json"):
+                result = result[7:]
+            elif result.startswith("```"):
+                result = result[3:]
+            if result.endswith("```"):
+                result = result[:-3]
+            result = result.strip()
+            
             try:
                 result = json.loads(result)
             except Exception:
-                result = {"score": 1, "status": "Rejected", "reason": "Failed to parse AI evaluation"}
+                # Fallback: extract substring between first { and last }
+                start = result.find('{')
+                end = result.rfind('}')
+                if start != -1 and end != -1:
+                    try:
+                        result = json.loads(result[start:end+1])
+                    except Exception:
+                        result = {}
+                else:
+                    result = {}
+
+        if not isinstance(result, dict):
+            result = {}
 
         score_int = result.get("score", 1)
         status = result.get("status", "Rejected")
         reason = result.get("reason", "Evaluation failed.")
+        allocated = result.get("allocated_funds", 0)
+        strengths = result.get("strengths", [])
+        weaknesses = result.get("weaknesses", [])
 
-        # Cap score between 1 and 10
         if not isinstance(score_int, int):
             score_int = 1
         score_int = max(1, min(10, score_int))
+        
+        if not isinstance(allocated, int):
+            allocated = 0
+            
+        if status != "Approved":
+            allocated = 0
 
-        # Store project
+        # Convert allocation to Wei (GEN tokens -> Wei)
+        allocated_wei = u256(allocated) * (u256(10) ** u256(18))
+
         project_id = self.next_project_id
         
         p = Project(
-            submitter=gl.message.sender_account,
+            submitter=gl.message.sender_address,
             name=name,
             details=details,
             url=url,
@@ -96,7 +150,10 @@ class RPGF(gl.Contract):
             status=status,
             reason=reason,
             score=u256(score_int),
-            withdrawn=False
+            withdrawn=False,
+            allocated_funds=allocated_wei,
+            strengths=json.dumps(strengths),
+            weaknesses=json.dumps(weaknesses)
         )
         
         self.projects[project_id] = p
@@ -106,13 +163,13 @@ class RPGF(gl.Contract):
 
     @gl.public.write
     def claim_funds(self, project_id: u256) -> None:
-        """Allows submitters of approved projects to claim their dynamically calculated allocation."""
+        """Allows submitters of approved projects to claim their allocated funds."""
         if project_id not in self.projects:
             raise gl.vm.UserError("Project not found")
             
         p = self.projects[project_id]
         
-        if p.submitter != gl.message.sender_account:
+        if p.submitter != gl.message.sender_address:
             raise gl.vm.UserError("Only the submitter can claim funds")
             
         if p.status != "Approved":
@@ -124,23 +181,19 @@ class RPGF(gl.Contract):
         if self.treasury == u256(0):
             raise gl.vm.UserError("Treasury is currently empty")
 
-        # Dynamic Allocation Math:
-        score_multiplier = p.score * u256(10)  # 10 to 100
-        ideal_payout = (p.amount_requested * score_multiplier) // u256(100)
-        
-        max_payout = (self.treasury * u256(5)) // u256(100)  # 5% of treasury
-        
-        final_payout = ideal_payout if ideal_payout < max_payout else max_payout
-        
-        if final_payout == u256(0):
-            raise gl.vm.UserError("Calculated payout is 0")
+        if p.allocated_funds == u256(0):
+            raise gl.vm.UserError("No funds were allocated to this project")
+            
+        if p.allocated_funds > self.treasury:
+            raise gl.vm.UserError("Insufficient funds in the treasury. Please try again later.")
+            
+        final_payout = p.allocated_funds
             
         p.withdrawn = True
         self.projects[project_id] = p
         
         self.treasury -= final_payout
         
-        # Send funds to submitter using _Recipient.emit_transfer
         _Recipient(p.submitter).emit_transfer(value=final_payout)
 
     @gl.public.view
@@ -152,6 +205,17 @@ class RPGF(gl.Contract):
         if project_id not in self.projects:
             return {}
         p = self.projects[project_id]
+        
+        try:
+            s_list = json.loads(p.strengths)
+        except Exception:
+            s_list = []
+            
+        try:
+            w_list = json.loads(p.weaknesses)
+        except Exception:
+            w_list = []
+            
         return {
             "id": int(project_id),
             "submitter": p.submitter.as_hex,
@@ -162,7 +226,10 @@ class RPGF(gl.Contract):
             "status": p.status,
             "reason": p.reason,
             "score": int(p.score),
-            "withdrawn": p.withdrawn
+            "withdrawn": p.withdrawn,
+            "allocated_funds": int(p.allocated_funds),
+            "strengths": s_list,
+            "weaknesses": w_list
         }
 
     @gl.public.view
@@ -170,6 +237,17 @@ class RPGF(gl.Contract):
         all_projs = []
         for pid in self.projects:
             p = self.projects[pid]
+            
+            try:
+                s_list = json.loads(p.strengths)
+            except Exception:
+                s_list = []
+                
+            try:
+                w_list = json.loads(p.weaknesses)
+            except Exception:
+                w_list = []
+                
             all_projs.append({
                 "id": int(pid),
                 "submitter": p.submitter.as_hex,
@@ -180,6 +258,9 @@ class RPGF(gl.Contract):
                 "status": p.status,
                 "reason": p.reason,
                 "score": int(p.score),
-                "withdrawn": p.withdrawn
+                "withdrawn": p.withdrawn,
+                "allocated_funds": int(p.allocated_funds),
+                "strengths": s_list,
+                "weaknesses": w_list
             })
         return all_projs

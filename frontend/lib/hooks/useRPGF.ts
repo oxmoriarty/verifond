@@ -17,6 +17,9 @@ export interface Project {
   reason: string;
   score: number;
   withdrawn: boolean;
+  allocated_funds?: number;
+  strengths?: string[];
+  weaknesses?: string[];
   txHash?: string; // Only present for pending projects from Supabase
 }
 
@@ -45,11 +48,14 @@ export function useProjects() {
           name: p.name,
           details: p.details,
           url: p.url,
-          amount_requested: Number(p.amount_requested),
+          amount_requested: Number(p.amount_requested) / 1e18,
           status: p.status,
           reason: p.reason,
           score: Number(p.score),
-          withdrawn: Boolean(p.withdrawn)
+          withdrawn: Boolean(p.withdrawn),
+          allocated_funds: Number(p.allocated_funds) / 1e18,
+          strengths: p.strengths || [],
+          weaknesses: p.weaknesses || []
         }));
       } catch (err) {
         console.error("Error fetching projects from GenLayer:", err);
@@ -98,7 +104,7 @@ export function useTreasury() {
           functionName: "get_treasury",
           args: [],
         });
-        return Number(bal);
+        return Number(bal) / 1e18;
       } catch (err) {
         console.error("Error fetching treasury:", err);
         return 0;
@@ -129,7 +135,7 @@ export function useSubmitProject() {
       const txHash = await client.writeContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
         functionName: "submit_project",
-        args: [name, details, url, BigInt(amountRequested)],
+        args: [name, details, url, BigInt(Math.floor(amountRequested * 1e18))],
         value: BigInt(0),
       });
 
@@ -197,7 +203,7 @@ export function useDonate() {
         address: CONTRACT_ADDRESS as `0x${string}`,
         functionName: "donate",
         args: [],
-        value: BigInt(amount),
+        value: BigInt(Math.floor(amount * 1e18)),
       });
 
       // Simple optimistic wait for local UI
