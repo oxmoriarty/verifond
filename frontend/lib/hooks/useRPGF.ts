@@ -134,7 +134,7 @@ export function useSubmitProject() {
       });
 
       // Post to our Supabase API
-      await fetch('/api/pending-projects', {
+      const res = await fetch('/api/pending-projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -146,6 +146,10 @@ export function useSubmitProject() {
           amount_requested: amountRequested
         })
       });
+
+      if (!res.ok) {
+        throw new Error("Transaction failed to save. Please try again.");
+      }
 
       return txHash;
     },
@@ -160,7 +164,9 @@ export function useSubmitProject() {
       console.error("Error submitting project:", err);
       setIsSubmitting(false);
       error("Submission Failed", {
-        description: err?.message || "Failed to submit project."
+        description: err?.message?.includes("Transaction") 
+          ? "Transaction cancelled or failed to save." 
+          : "Transaction failed."
       });
     },
   });
@@ -197,7 +203,7 @@ export function useDonate() {
       // Simple optimistic wait for local UI
       await client.waitForTransactionReceipt({
         hash: txHash,
-        status: "FINALIZED" as any,
+        status: "ACCEPTED" as any,
         retries: 24,
         interval: 5000,
       });
@@ -236,7 +242,7 @@ export function useClaimFunds() {
 
       await client.waitForTransactionReceipt({
         hash: txHash,
-        status: "FINALIZED" as any,
+        status: "ACCEPTED" as any,
         retries: 24,
         interval: 5000,
       });

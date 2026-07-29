@@ -55,7 +55,10 @@ class RPGF(gl.Contract):
         criteria = "Must return a valid JSON object with 'score' (integer), 'status' (string 'Approved' or 'Rejected'), and 'reason' (string)."
         
         def fetch_data():
-            content = gl.nondet.web.render(url, mode='text')
+            try:
+                content = gl.nondet.web.render(url, mode='text')
+            except Exception as e:
+                content = f"Failed to fetch website content: The URL provided may be invalid or unreachable."
             return f"Project Name: {name}\nDetails: {details}\n\nWebsite Content:\n{content}"
 
         result = gl.eq_principle.prompt_non_comparative(
