@@ -32,6 +32,11 @@ export function ProjectCard({ project }: { project: Project }) {
                 Score: {project.score}/10
               </span>
             )}
+            {project.allocated_funds !== undefined && project.allocated_funds > 0 && (
+              <span className="text-xs font-medium px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                Allocated: {project.allocated_funds} GEN
+              </span>
+            )}
           </div>
           
           <h3 className="text-xl font-bold text-white mb-1 truncate">{project.name || "Unnamed Project"}</h3>
@@ -60,7 +65,7 @@ export function ProjectCard({ project }: { project: Project }) {
                }`}
              >
                {isClaiming ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
-               {project.withdrawn ? "Funds Claimed" : "Claim Funds"}
+               {project.withdrawn ? `${project.allocated_funds} GEN Claimed` : `Claim ${project.allocated_funds} GEN`}
              </button>
              {!project.withdrawn && (
                <p className="text-[10px] text-white/40 mt-2 text-right">
@@ -93,6 +98,26 @@ export function ProjectCard({ project }: { project: Project }) {
               <div className="border-t border-white/10 pt-4">
                 <strong className="text-white">GenLayer AI Reasoning:</strong><br/>
                 {project.reason}
+              </div>
+            )}
+            {project.strengths && project.strengths.length > 0 && (
+              <div className="border-t border-white/10 pt-4">
+                <strong className="text-emerald-400">Strengths:</strong>
+                <ul className="list-disc list-inside mt-2 space-y-1">
+                  {project.strengths.map((str, idx) => (
+                    <li key={idx}>{str}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {project.weaknesses && project.weaknesses.length > 0 && (
+              <div className="border-t border-white/10 pt-4">
+                <strong className="text-red-400">Weaknesses:</strong>
+                <ul className="list-disc list-inside mt-2 space-y-1">
+                  {project.weaknesses.map((wk, idx) => (
+                    <li key={idx}>{wk}</li>
+                  ))}
+                </ul>
               </div>
             )}
             <div className="mt-4 flex items-center gap-2 text-xs text-white/40">

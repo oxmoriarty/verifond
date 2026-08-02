@@ -35,8 +35,10 @@ export default function Dashboard() {
     );
   }
 
-  // Merge pending and finalized projects
-  const allProjects = [...pendingProjects, ...onChainProjects].sort((a, b) => b.id - a.id);
+  // Merge pending and finalized projects (filtering out pending ones that are already finalized)
+  const finalizedUrls = new Set(onChainProjects.map(p => p.url));
+  const activePendingProjects = pendingProjects.filter(p => !finalizedUrls.has(p.url));
+  const allProjects = [...activePendingProjects, ...onChainProjects].sort((a, b) => (b.id || 0) - (a.id || 0));
   const myProjects = allProjects.filter(p => p.submitter.toLowerCase() === address?.toLowerCase());
 
   return (
