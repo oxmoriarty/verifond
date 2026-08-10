@@ -239,6 +239,30 @@ export function useClaimFunds() {
 
       const client = await getClient();
       
+      // Pre-flight check: ensure treasury has enough funds
+      try {
+        const treasuryBal: any = await client.readContract({
+          address: CONTRACT_ADDRESS as `0x${string}`,
+          functionName: "get_treasury",
+          args: [],
+        });
+        const treasuryInGen = Number(treasuryBal) / 1e18;
+        
+        const projectData: any = await client.readContract({
+          address: CONTRACT_ADDRESS as `0x${string}`,
+          functionName: "get_project",
+          args: [BigInt(projectId)],
+        });
+        const allocatedInGen = Number(projectData.allocated_funds) / 1e18;
+
+        if (allocatedInGen > treasuryInGen) {
+          throw new Error("Insufficient funds in the treasury. Please try again later.");
+        }
+      } catch (err: any) {
+        if (err.message.includes("Insufficient funds")) throw err;
+        console.error("Pre-flight check failed:", err);
+      }
+      
       const txHash = await client.writeContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
         functionName: "claim_funds",
@@ -246,12 +270,17 @@ export function useClaimFunds() {
         value: BigInt(0),
       });
 
-      await client.waitForTransactionReceipt({
+      const receipt: any = await client.waitForTransactionReceipt({
         hash: txHash,
         status: "ACCEPTED" as any,
         retries: 24,
         interval: 5000,
       });
+
+      if (receipt && (receipt.status === "ERROR" || receipt.status === "REVERTED")) {
+        throw new Error("Claim unsuccessful. Transaction was reverted by the network.");
+      }
+
       return txHash;
     },
     onSuccess: () => {
@@ -260,7 +289,7 @@ export function useClaimFunds() {
       success("Funds Claimed!", { description: "Your GEN tokens have been transferred." });
     },
     onError: (err: any) => {
-      error("Claim Failed", { description: err?.message });
+      error("Claim unsuccessful", { description: err?.message || "An unknown error occurred." });
     }
   });
 }
