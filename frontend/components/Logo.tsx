@@ -40,7 +40,7 @@ export function Logo({
   // Verifond Mark (Loaded from public/verifundlogo.svg)
   const StrongMark = () => (
     <Image 
-      src="/verifundlogo.svg" 
+      src="/verifondlogo.svg" 
       alt="Verifond Logo" 
       width={width} 
       height={height}
