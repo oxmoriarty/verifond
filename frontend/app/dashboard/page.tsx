@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { ProjectForm } from "@/components/ProjectForm";
 import { ProjectCard } from "@/components/ProjectCard";
+import { VerificationGate } from "@/components/VerificationGate";
 import { useProjects, usePendingProjects, useTreasury, useDonate } from "@/lib/hooks/useRPGF";
+import { useIsVerified } from "@/lib/hooks/useProofOracle";
 import { Loader2, LayoutGrid, Globe, Coins, ShieldAlert, PlusCircle } from "lucide-react";
 
 export default function Dashboard() {
@@ -20,6 +22,8 @@ export default function Dashboard() {
   const { data: pendingProjects = [], isLoading: pendingLoading } = usePendingProjects();
   const { data: treasuryBalance = 0, isLoading: treasuryLoading } = useTreasury();
   const { mutate: donate, isPending: isDonating } = useDonate();
+  
+  const { data: isVerified, isLoading: isVerifiedLoading } = useIsVerified("github");
 
   useEffect(() => {
     if (!walletLoading && !isConnected) {
@@ -107,10 +111,18 @@ export default function Dashboard() {
             
             {activeTab === "SUBMIT" && (
               <div className="space-y-8">
-                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-8">
-                  <h2 className="text-2xl font-bold text-white mb-6">Submit a Project</h2>
-                  <ProjectForm />
-                </div>
+                {isVerifiedLoading ? (
+                  <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-8 flex items-center justify-center min-h-[400px]">
+                    <Loader2 className="w-8 h-8 animate-spin text-white/40" />
+                  </div>
+                ) : isVerified ? (
+                  <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-8">
+                    <h2 className="text-2xl font-bold text-white mb-6">Submit a Project</h2>
+                    <ProjectForm />
+                  </div>
+                ) : (
+                  <VerificationGate />
+                )}
               </div>
             )}
 
