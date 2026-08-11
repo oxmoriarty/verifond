@@ -46,6 +46,7 @@ export function useVerifyAccount() {
         address: ORACLE_ADDRESS as `0x${string}`,
         functionName: "verify_account",
         args: [platform, profileUrl],
+        value: 0n,
       });
 
       // 2. Wait for the result from the Intelligent Contract
