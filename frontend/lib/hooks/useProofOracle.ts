@@ -60,7 +60,7 @@ export function useVerifyAccount() {
       // Parse the returned username from the receipt data
       // (The actual return value parsing might depend on GenLayer JS implementation,
       // assuming receipt.data contains the returned string from the smart contract)
-      const verifiedUsername = receipt.data as string;
+      const verifiedUsername = (receipt as any).data as string;
       if (!verifiedUsername) {
          throw new Error("Verification failed on-chain.");
       }
