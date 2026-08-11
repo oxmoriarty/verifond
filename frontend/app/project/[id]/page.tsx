@@ -130,101 +130,99 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ id: s
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-            {/* Left Column: Submitter Details */}
-            <div className="md:col-span-1 space-y-8">
-              <div>
-                <h3 className="text-white/50 text-sm font-bold uppercase tracking-wider mb-3">Submitted By</h3>
-                <p className="text-white font-mono bg-black/40 px-3 py-2 rounded-lg border border-white/5 text-sm break-all">
+          <div className="flex flex-col gap-8">
+            {/* Row 1: Key Project Info Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+                <h3 className="text-white/50 text-xs font-bold uppercase tracking-wider mb-2">Submitted By</h3>
+                <p className="text-white font-mono text-sm break-all">
                   {project.submitter}
                 </p>
               </div>
-              
-              <div>
-                <h3 className="text-white/50 text-sm font-bold uppercase tracking-wider mb-3">Project Details</h3>
-                <p className="text-white/80 leading-relaxed text-sm">
-                  {project.details}
-                </p>
-              </div>
-
-              <div>
-                <h3 className="text-white/50 text-sm font-bold uppercase tracking-wider mb-3">Amount Requested</h3>
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+                <h3 className="text-white/50 text-xs font-bold uppercase tracking-wider mb-2">Amount Requested</h3>
                 <p className="text-white text-xl font-medium">
                   {project.amount_requested} GEN
                 </p>
               </div>
             </div>
 
-            {/* Right Column: AI Consensus Report */}
-            <div className="md:col-span-2">
-              <div className="bg-black/40 rounded-2xl p-6 md:p-8 border border-white/5 shadow-inner relative overflow-hidden h-full">
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 via-blue-500 to-purple-500"></div>
-                
-                <h2 className="flex items-center gap-3 text-xl font-bold text-white mb-6">
-                  <ShieldCheck className="w-6 h-6 text-emerald-400" />
-                  AI Consensus Report
-                </h2>
+            {/* Row 2: Project Details (Full Width) */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-6 md:p-8">
+              <h3 className="text-white/50 text-xs font-bold uppercase tracking-wider mb-4">Project Details</h3>
+              <p className="text-white/90 leading-relaxed text-base whitespace-pre-wrap">
+                {project.details}
+              </p>
+            </div>
 
-                {project.status === "Pending" ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-center h-full">
-                    <Loader2 className="w-10 h-10 animate-spin text-white/20 mb-4" />
-                    <p className="text-white/60">GenLayer AI validators are actively reviewing this project.</p>
-                    <p className="text-white/40 text-sm mt-2">Results will appear here once consensus is reached.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-8">
-                    {project.reason && (
-                      <div>
-                        <h3 className="text-white/50 text-sm font-bold uppercase tracking-wider mb-2">Reasoning</h3>
-                        <p className="text-white/90 leading-relaxed text-[15px] font-mono">
-                          {project.reason}
-                        </p>
+            {/* Row 3: AI Consensus Report (Full Width) */}
+            <div className="bg-black/40 rounded-2xl p-6 md:p-10 border border-white/5 shadow-inner relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 via-blue-500 to-purple-500"></div>
+              
+              <h2 className="flex items-center gap-3 text-xl font-bold text-white mb-8">
+                <ShieldCheck className="w-6 h-6 text-emerald-400" />
+                AI Consensus Report
+              </h2>
+
+              {project.status === "Pending" ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <Loader2 className="w-10 h-10 animate-spin text-white/20 mb-4" />
+                  <p className="text-white/60">GenLayer AI validators are actively reviewing this project.</p>
+                  <p className="text-white/40 text-sm mt-2">Results will appear here once consensus is reached.</p>
+                </div>
+              ) : (
+                <div className="space-y-10">
+                  {project.reason && (
+                    <div>
+                      <h3 className="text-white/50 text-sm font-bold uppercase tracking-wider mb-3">Reasoning</h3>
+                      <p className="text-white/90 leading-relaxed text-base font-mono bg-white/5 p-6 rounded-xl border border-white/10">
+                        {project.reason}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {project.strengths && project.strengths.length > 0 && (
+                      <div className="bg-emerald-900/10 border border-emerald-500/20 rounded-2xl p-6 md:p-8">
+                        <h3 className="text-emerald-400 font-bold mb-4 flex items-center gap-2 text-lg">
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                          Strengths
+                        </h3>
+                        <ul className="space-y-3">
+                          {project.strengths.map((str, idx) => (
+                            <li key={idx} className="text-emerald-100/80 text-sm md:text-base leading-relaxed flex items-start gap-3">
+                              <span className="text-emerald-500/50 mt-1">•</span>
+                              {str}
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     )}
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                      {project.strengths && project.strengths.length > 0 && (
-                        <div className="bg-emerald-900/10 border border-emerald-500/20 rounded-xl p-5">
-                          <h3 className="text-emerald-400 font-bold mb-3 flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                            Strengths
-                          </h3>
-                          <ul className="space-y-2">
-                            {project.strengths.map((str, idx) => (
-                              <li key={idx} className="text-emerald-100/70 text-sm leading-relaxed flex items-start gap-2">
-                                <span className="text-emerald-500/50 mt-0.5">•</span>
-                                {str}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {project.weaknesses && project.weaknesses.length > 0 && (
-                        <div className="bg-red-900/10 border border-red-500/20 rounded-xl p-5">
-                          <h3 className="text-red-400 font-bold mb-3 flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-red-400"></span>
-                            Weaknesses
-                          </h3>
-                          <ul className="space-y-2">
-                            {project.weaknesses.map((wk, idx) => (
-                              <li key={idx} className="text-red-100/70 text-sm leading-relaxed flex items-start gap-2">
-                                <span className="text-red-500/50 mt-0.5">•</span>
-                                {wk}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="mt-8 pt-6 border-t border-white/10 flex items-center gap-2 text-sm text-white/40">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500/70" />
-                      Evaluated securely on-chain by GenLayer validator consensus
-                    </div>
+                    {project.weaknesses && project.weaknesses.length > 0 && (
+                      <div className="bg-red-900/10 border border-red-500/20 rounded-2xl p-6 md:p-8">
+                        <h3 className="text-red-400 font-bold mb-4 flex items-center gap-2 text-lg">
+                          <span className="w-2.5 h-2.5 rounded-full bg-red-400"></span>
+                          Weaknesses
+                        </h3>
+                        <ul className="space-y-3">
+                          {project.weaknesses.map((wk, idx) => (
+                            <li key={idx} className="text-red-100/80 text-sm md:text-base leading-relaxed flex items-start gap-3">
+                              <span className="text-red-500/50 mt-1">•</span>
+                              {wk}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+
+                  <div className="pt-6 flex items-center justify-center gap-2 text-sm text-white/40">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500/70" />
+                    Evaluated securely on-chain by GenLayer validator consensus
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
