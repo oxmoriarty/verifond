@@ -36,11 +36,18 @@ export function useProjects() {
 
       try {
         const client = await getClient();
-        const projects: any = await client.readContract({
+        const projectsData: any = await client.readContract({
           address: CONTRACT_ADDRESS as `0x${string}`,
           functionName: "get_all_projects",
           args: [],
         });
+        
+        let projects = [];
+        try {
+            projects = typeof projectsData === "string" ? JSON.parse(projectsData) : projectsData;
+        } catch (e) {
+            console.error("Failed to parse projects JSON", e);
+        }
         
         return projects.map((p: any) => ({
           id: Number(p.id),
@@ -248,11 +255,12 @@ export function useClaimFunds() {
         });
         const treasuryInGen = Number(treasuryBal) / 1e18;
         
-        const projectData: any = await client.readContract({
+        const projectDataStr: any = await client.readContract({
           address: CONTRACT_ADDRESS as `0x${string}`,
           functionName: "get_project",
           args: [BigInt(projectId)],
         });
+        const projectData = typeof projectDataStr === "string" ? JSON.parse(projectDataStr) : projectDataStr;
         const allocatedInGen = Number(projectData.allocated_funds) / 1e18;
 
         if (allocatedInGen > treasuryInGen) {
@@ -290,6 +298,70 @@ export function useClaimFunds() {
     },
     onError: (err: any) => {
       error("Claim unsuccessful", { description: err?.message || "An unknown error occurred." });
+    }
+  });
+}
+
+// ==========================================
+// 6. Identity Verification (GitHub)
+// ==========================================
+export function useCheckLinkedGithub() {
+  const { address } = useWallet();
+
+  return useQuery({
+    queryKey: ["linkedGithub", address],
+    queryFn: async () => {
+      if (!address || !CONTRACT_ADDRESS) return null;
+      try {
+        const client = await getClient();
+        const res: any = await client.readContract({
+          address: CONTRACT_ADDRESS as `0x${string}`,
+          functionName: "get_linked_github",
+          args: [address],
+        });
+        return res ? String(res) : null;
+      } catch (e) {
+        console.error("Failed to fetch linked github", e);
+        return null;
+      }
+    },
+    enabled: !!address && !!CONTRACT_ADDRESS,
+  });
+}
+
+export function useVerifyGithub() {
+  const { address } = useWallet();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (profileUrl: string) => {
+      if (!address) throw new Error("Wallet not connected.");
+      if (!CONTRACT_ADDRESS) throw new Error("Contract address is not configured.");
+      
+      const client = await getClient();
+      
+      const txHash = await client.writeContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        functionName: "verify_and_link_github",
+        args: [profileUrl],
+      });
+
+      // Poll until accepted
+      await client.waitForTransactionReceipt({
+        hash: txHash,
+        status: "ACCEPTED" as any,
+        retries: 40,
+        interval: 5000,
+      });
+
+      return txHash;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["linkedGithub"] });
+      success("Verification Successful!", { description: "Your GitHub account is now permanently linked." });
+    },
+    onError: (err: any) => {
+      error("Verification Failed", { description: err?.message || "Ensure your wallet address is in your bio." });
     }
   });
 }

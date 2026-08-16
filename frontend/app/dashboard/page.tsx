@@ -6,24 +6,22 @@ import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { ProjectForm } from "@/components/ProjectForm";
 import { ProjectCard } from "@/components/ProjectCard";
-import { VerificationGate } from "@/components/VerificationGate";
-import { useProjects, usePendingProjects, useTreasury, useDonate } from "@/lib/hooks/useRPGF";
-import { useIsVerified } from "@/lib/hooks/useProofOracle";
+import { useProjects, usePendingProjects, useTreasury, useDonate, useCheckLinkedGithub } from "@/lib/hooks/useRPGF";
 import { Loader2, LayoutGrid, Globe, Coins, ShieldAlert, PlusCircle } from "lucide-react";
 
 export default function Dashboard() {
   const { isConnected, address, isLoading: walletLoading } = useWallet();
   const router = useRouter();
   
-  const [activeTab, setActiveTab] = useState<"SUBMIT" | "MY_PROJECTS" | "GLOBAL" | "TREASURY">("SUBMIT");
+  const [activeTab, setActiveTab] = useState<"MY_PROJECTS" | "SUBMIT">("MY_PROJECTS");
   const [donateAmount, setDonateAmount] = useState("");
 
   const { data: onChainProjects = [], isLoading: projectsLoading } = useProjects();
   const { data: pendingProjects = [], isLoading: pendingLoading } = usePendingProjects();
   const { data: treasuryBalance = 0, isLoading: treasuryLoading } = useTreasury();
   const { mutate: donate, isPending: isDonating } = useDonate();
-  
-  const { data: isVerified, isLoading: isVerifiedLoading } = useIsVerified("github");
+
+  const { data: linkedGithub, isLoading: isCheckingGithub } = useCheckLinkedGithub();
 
   useEffect(() => {
     if (!walletLoading && !isConnected) {
@@ -31,7 +29,14 @@ export default function Dashboard() {
     }
   }, [isConnected, walletLoading, router]);
 
-  if (walletLoading || !isConnected) {
+  useEffect(() => {
+    // If wallet is connected, but they haven't linked github, redirect to onboarding
+    if (!walletLoading && isConnected && !isCheckingGithub && linkedGithub === null) {
+      router.push("/onboarding");
+    }
+  }, [isConnected, walletLoading, isCheckingGithub, linkedGithub, router]);
+
+  if (walletLoading || !isConnected || isCheckingGithub) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-white/40" />
@@ -111,18 +116,10 @@ export default function Dashboard() {
             
             {activeTab === "SUBMIT" && (
               <div className="space-y-8">
-                {isVerifiedLoading ? (
-                  <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-8 flex items-center justify-center min-h-[400px]">
-                    <Loader2 className="w-8 h-8 animate-spin text-white/40" />
-                  </div>
-                ) : isVerified ? (
-                  <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-8">
-                    <h2 className="text-2xl font-bold text-white mb-6">Submit a Project</h2>
-                    <ProjectForm />
-                  </div>
-                ) : (
-                  <VerificationGate />
-                )}
+                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-8">
+                  <h2 className="text-2xl font-bold text-white mb-6">Submit a Project</h2>
+                  <ProjectForm />
+                </div>
               </div>
             )}
 
