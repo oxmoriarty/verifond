@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { ProjectForm } from "@/components/ProjectForm";
 import { ProjectCard } from "@/components/ProjectCard";
-import { useProjects, usePendingProjects, useTreasury, useDonate, useCheckLinkedGithub } from "@/lib/hooks/useRPGF";
+import { useProjects, usePendingProjects, useTreasury, useDonate, useCheckLinkedGithub, usePendingVerification } from "@/lib/hooks/useRPGF";
 import { Loader2, LayoutGrid, Globe, Coins, ShieldAlert, PlusCircle } from "lucide-react";
 
 export default function Dashboard() {
@@ -22,6 +22,7 @@ export default function Dashboard() {
   const { mutate: donate, isPending: isDonating } = useDonate();
 
   const { data: linkedGithub, isLoading: isCheckingGithub } = useCheckLinkedGithub();
+  const { data: pendingVerification, isLoading: isCheckingPending } = usePendingVerification();
 
   useEffect(() => {
     if (!walletLoading && !isConnected) {
@@ -31,10 +32,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     // If wallet is connected, but they haven't linked github, redirect to onboarding
-    if (!walletLoading && isConnected && !isCheckingGithub && linkedGithub === null) {
+    if (!walletLoading && isConnected && !isCheckingGithub && !isCheckingPending && !linkedGithub && !pendingVerification) {
       router.push("/onboarding");
     }
-  }, [isConnected, walletLoading, isCheckingGithub, linkedGithub, router]);
+  }, [isConnected, walletLoading, isCheckingGithub, isCheckingPending, linkedGithub, pendingVerification, router]);
 
   if (walletLoading || !isConnected || isCheckingGithub) {
     return (
@@ -63,8 +64,12 @@ export default function Dashboard() {
             {/* User Card */}
             <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
               <p className="text-xs text-white/50 uppercase tracking-wider font-semibold mb-2">Connected Wallet</p>
-              <p className="text-white font-mono text-sm truncate">
+              <p className="text-white font-mono text-sm truncate mb-4">
                 {address?.slice(0, 6)}...{address?.slice(-4)}
+              </p>
+              <p className="text-xs text-white/50 uppercase tracking-wider font-semibold mb-2">Linked GitHub</p>
+              <p className="text-white font-mono text-sm truncate">
+                {linkedGithub ? `@${linkedGithub}` : (pendingVerification ? "Verification Pending (~20m)" : "Not Linked")}
               </p>
             </div>
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@/lib/genlayer/wallet";
-import { useCheckLinkedGithub, useVerifyGithub } from "@/lib/hooks/useRPGF";
+import { useCheckLinkedGithub, useVerifyGithub, usePendingVerification } from "@/lib/hooks/useRPGF";
 import { Navbar } from "@/components/Navbar";
 import { Loader2, Github, Copy, Check, ArrowRight } from "lucide-react";
 
@@ -12,6 +12,7 @@ export default function Onboarding() {
   const router = useRouter();
   
   const { data: linkedGithub, isLoading: isCheckingGithub } = useCheckLinkedGithub();
+  const { data: pendingVerification, isLoading: isCheckingPending } = usePendingVerification();
   const { mutate: verifyGithub, isPending: isVerifying } = useVerifyGithub();
 
   const [githubUrl, setGithubUrl] = useState("");
@@ -24,11 +25,11 @@ export default function Onboarding() {
   }, [isConnected, walletLoading, router]);
 
   useEffect(() => {
-    // If already verified, redirect to dashboard
-    if (linkedGithub) {
+    // If already verified or verification is pending, redirect to dashboard
+    if (linkedGithub || pendingVerification) {
       router.push("/dashboard");
     }
-  }, [linkedGithub, router]);
+  }, [linkedGithub, pendingVerification, router]);
 
   const handleVerify = (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,7 +44,7 @@ export default function Onboarding() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (walletLoading || isCheckingGithub) {
+  if (walletLoading || isCheckingGithub || isCheckingPending) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-white/40" />

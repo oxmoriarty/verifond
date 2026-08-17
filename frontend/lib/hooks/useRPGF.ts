@@ -319,13 +319,42 @@ export function useCheckLinkedGithub() {
           functionName: "get_linked_github",
           args: [address],
         });
-        return res ? String(res) : null;
+        
+        const username = res ? String(res) : null;
+        
+        // If we found a linked GitHub, delete any stale pending verification from Supabase
+        if (username) {
+          fetch(`/api/pending-verifications?wallet=${address}`, { method: 'DELETE' }).catch(console.error);
+        }
+        
+        return username;
       } catch (e) {
         console.error("Failed to fetch linked github", e);
         return null;
       }
     },
     enabled: !!address && !!CONTRACT_ADDRESS,
+  });
+}
+
+export function usePendingVerification() {
+  const { address } = useWallet();
+
+  return useQuery({
+    queryKey: ["pendingVerification", address],
+    queryFn: async () => {
+      if (!address) return null;
+      try {
+        const res = await fetch(`/api/pending-verifications?wallet=${address}`);
+        if (!res.ok) return null;
+        return await res.json();
+      } catch (e) {
+        console.error("Failed to fetch pending verification", e);
+        return null;
+      }
+    },
+    enabled: !!address,
+    refetchInterval: 10000,
   });
 }
 
@@ -347,22 +376,26 @@ export function useVerifyGithub() {
         value: BigInt(0),
       });
 
-      // Poll until accepted
-      await client.waitForTransactionReceipt({
-        hash: txHash,
-        status: "ACCEPTED" as any,
-        retries: 40,
-        interval: 5000,
-      });
+      // Post pending verification to Supabase backend
+      await fetch('/api/pending-verifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          txHash,
+          wallet_address: address,
+          profile_url: profileUrl
+        })
+      }).catch(console.error);
 
       return txHash;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["linkedGithub"] });
-      success("Verification Successful!", { description: "Your GitHub account is now permanently linked." });
+      queryClient.invalidateQueries({ queryKey: ["pendingVerification"] });
+      success("Verification Submitted!", { description: "Your transaction is submitted. GenLayer AI verification takes about 20 minutes to finalize on Testnet." });
     },
     onError: (err: any) => {
-      error("Verification Failed", { description: err?.message || "Ensure your wallet address is in your bio." });
+      error("Verification Failed", { description: err?.message || "Failed to submit verification." });
     }
   });
 }
