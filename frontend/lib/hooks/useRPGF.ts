@@ -25,6 +25,34 @@ export interface Project {
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "";
 
+function getFriendlyErrorMessage(err: any, defaultMsg: string): string {
+  if (!err) return defaultMsg;
+  const msg = typeof err === 'string' ? err : (err.message || err.toString());
+  
+  if (msg.includes("rejected") || msg.includes("User denied")) {
+    return "Transaction was rejected in your wallet.";
+  }
+  if (msg.includes("gas rate limit exceeded") || msg.includes("node is at capacity") || msg.includes("rate limit")) {
+    return "The network is currently busy. Please wait a few seconds and try again.";
+  }
+  if (msg.includes("Insufficient funds") || msg.includes("insufficient funds")) {
+    return "Insufficient GEN testnet funds to complete this transaction.";
+  }
+  if (msg.includes("execution reverted") || msg.includes("revert")) {
+    return "Transaction was reverted by the network.";
+  }
+  if (msg.includes("Failed to fetch") || msg.includes("network error")) {
+    return "Network connection issue. Please check your internet connection.";
+  }
+  
+  // Fallback for long messy RPC errors
+  if (msg.length > 80) {
+    return defaultMsg;
+  }
+  
+  return msg;
+}
+
 // ==========================================
 // 1. Fetch On-Chain Projects (Finalized)
 // ==========================================
@@ -177,9 +205,7 @@ export function useSubmitProject() {
       console.error("Error submitting project:", err);
       setIsSubmitting(false);
       error("Submission Failed", {
-        description: err?.message?.includes("Transaction") 
-          ? "Transaction cancelled or failed to save." 
-          : "Transaction failed."
+        description: getFriendlyErrorMessage(err, "Transaction failed. Please try again.")
       });
     },
   });
@@ -227,7 +253,7 @@ export function useDonate() {
       success("Donation Successful!", { description: "Thank you for funding public goods!" });
     },
     onError: (err: any) => {
-      error("Donation Failed", { description: err?.message });
+      error("Donation Failed", { description: getFriendlyErrorMessage(err, "Failed to send donation. Please try again.") });
     }
   });
 }
@@ -297,7 +323,7 @@ export function useClaimFunds() {
       success("Funds Claimed!", { description: "Your GEN tokens have been transferred." });
     },
     onError: (err: any) => {
-      error("Claim unsuccessful", { description: err?.message || "An unknown error occurred." });
+      error("Claim unsuccessful", { description: getFriendlyErrorMessage(err, "An unknown error occurred. Please try again.") });
     }
   });
 }
@@ -395,7 +421,7 @@ export function useVerifyGithub() {
       success("Verification Submitted!", { description: "Your transaction is submitted. GenLayer AI verification takes about 20 minutes to finalize on Testnet." });
     },
     onError: (err: any) => {
-      error("Verification Failed", { description: err?.message || "Failed to submit verification." });
+      error("Verification Failed", { description: getFriendlyErrorMessage(err, "Failed to submit verification. Please try again.") });
     }
   });
 }
