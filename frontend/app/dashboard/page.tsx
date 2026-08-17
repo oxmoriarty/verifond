@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useWallet } from "@/lib/genlayer/wallet";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { ProjectForm } from "@/components/ProjectForm";
 import { ProjectCard } from "@/components/ProjectCard";
