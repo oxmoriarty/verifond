@@ -3,6 +3,7 @@
 import { AccountPanel } from "./AccountPanel";
 import { Logo } from "./Logo";
 import { Activity } from "lucide-react";
+import Link from "next/link";
 
 export function Navbar() {
   return (
@@ -10,8 +11,10 @@ export function Navbar() {
       <div className="max-w-6xl mx-auto h-full px-4 md:px-8">
         <div className="flex items-center justify-between h-full">
           <div className="flex items-center h-full relative">
-            <div className="absolute top-1/2 left-0 -translate-y-1/2">
-              <Logo variant="mark" size="md" />
+            <div className="absolute top-1/2 left-0 -translate-y-1/2 cursor-pointer transition-transform hover:scale-105 active:scale-95">
+              <Link href="/">
+                <Logo variant="mark" size="md" />
+              </Link>
             </div>
             {/* Invisible spacer to reserve the width for the absolute logo */}
             <div className="w-[100px]" />

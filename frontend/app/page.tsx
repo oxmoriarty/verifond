@@ -1,15 +1,19 @@
 "use client";
 
+import { useState } from "react";
 import { useWallet } from "@/lib/genlayer/wallet";
 import { Navbar } from "@/components/Navbar";
 import { useRouter } from "next/navigation";
-import { Sparkles, ArrowRight, ShieldCheck, Zap, Globe } from "lucide-react";
+import { Sparkles, ArrowRight, ShieldCheck, Zap, Globe, Loader2 } from "lucide-react";
 
 export default function LandingPage() {
   const { isConnected, connectWallet } = useWallet();
   const router = useRouter();
 
+  const [isLoading, setIsLoading] = useState(false);
+
   const handleGetStarted = async () => {
+    setIsLoading(true);
     if (isConnected) {
       router.push("/dashboard");
     } else {
@@ -18,6 +22,7 @@ export default function LandingPage() {
         router.push("/dashboard");
       } catch (err) {
         console.error("Failed to connect wallet", err);
+        setIsLoading(false);
       }
     }
   };
@@ -45,10 +50,20 @@ export default function LandingPage() {
           <div className="pt-8">
             <button
               onClick={handleGetStarted}
-              className="group relative inline-flex items-center justify-center gap-3 px-8 py-4 bg-white text-black rounded-full font-bold text-lg transition-all hover:scale-105 hover:shadow-[0_0_40px_rgba(255,255,255,0.3)]"
+              disabled={isLoading}
+              className="group relative inline-flex items-center justify-center gap-3 px-8 py-4 bg-white text-black rounded-full font-bold text-lg transition-all hover:scale-105 hover:shadow-[0_0_40px_rgba(255,255,255,0.3)] disabled:opacity-70 disabled:hover:scale-100 disabled:cursor-wait"
             >
-              Get Started
-              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              {isLoading ? (
+                <>
+                  Connecting...
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                </>
+              ) : (
+                <>
+                  Get Started
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </>
+              )}
             </button>
           </div>
         </section>
