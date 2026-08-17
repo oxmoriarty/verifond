@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useWallet } from "@/lib/genlayer/wallet";
 import { useCheckLinkedGithub, useVerifyGithub, usePendingVerification } from "@/lib/hooks/useRPGF";
 import { Navbar } from "@/components/Navbar";
@@ -139,9 +140,18 @@ export default function Onboarding() {
             </div>
           </div>
           
-          <p className="text-center text-sm text-white/40 mt-8">
-            You can remove your wallet address from your bio immediately after verification completes.
-          </p>
+          <div className="flex flex-col items-center gap-6 mt-8">
+            <p className="text-center text-sm text-white/40">
+              You can remove your wallet address from your bio immediately after verification completes.
+            </p>
+            
+            <Link 
+              href="/dashboard" 
+              className="text-sm font-medium text-white/50 hover:text-white transition-colors"
+            >
+              Skip for now
+            </Link>
+          </div>
 
         </div>
       </div>

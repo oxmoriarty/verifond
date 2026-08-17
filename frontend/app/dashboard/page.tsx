@@ -30,13 +30,6 @@ export default function Dashboard() {
     }
   }, [isConnected, walletLoading, router]);
 
-  useEffect(() => {
-    // If wallet is connected, but they haven't linked github, redirect to onboarding
-    if (!walletLoading && isConnected && !isCheckingGithub && !isCheckingPending && !linkedGithub && !pendingVerification) {
-      router.push("/onboarding");
-    }
-  }, [isConnected, walletLoading, isCheckingGithub, isCheckingPending, linkedGithub, pendingVerification, router]);
-
   if (walletLoading || !isConnected || isCheckingGithub) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
@@ -67,9 +60,16 @@ export default function Dashboard() {
               <p className="text-white font-mono text-sm truncate mb-4">
                 {address?.slice(0, 6)}...{address?.slice(-4)}
               </p>
-              <p className="text-xs text-white/50 uppercase tracking-wider font-semibold mb-2">Linked GitHub</p>
+              <p className="text-xs text-white/50 uppercase tracking-wider font-semibold mb-2 flex items-center justify-between">
+                Linked GitHub
+                {!linkedGithub && !pendingVerification && (
+                  <Link href="/onboarding" className="text-blue-400 hover:text-blue-300 transition-colors underline decoration-blue-500/30 underline-offset-2">
+                    Verify Now
+                  </Link>
+                )}
+              </p>
               <p className="text-white font-mono text-sm truncate">
-                {linkedGithub ? `@${linkedGithub}` : (pendingVerification ? "Verification Pending (~20m)" : "Not Linked")}
+                {linkedGithub ? `@${linkedGithub}` : (pendingVerification ? "Verification Pending..." : "Not Linked")}
               </p>
             </div>
 
@@ -122,8 +122,35 @@ export default function Dashboard() {
             {activeTab === "SUBMIT" && (
               <div className="space-y-8">
                 <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-8">
-                  <h2 className="text-2xl font-bold text-white mb-6">Submit a Project</h2>
-                  <ProjectForm />
+                  {linkedGithub ? (
+                    <>
+                      <h2 className="text-2xl font-bold text-white mb-6">Submit a Project</h2>
+                      <ProjectForm />
+                    </>
+                  ) : pendingVerification ? (
+                    <div className="py-12 flex flex-col items-center justify-center text-center">
+                      <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mb-6">
+                        <Loader2 className="w-8 h-8 text-white/50 animate-spin" />
+                      </div>
+                      <h3 className="text-xl font-bold text-white mb-3">Verification Pending...</h3>
+                      <p className="text-white/60 max-w-md">
+                        Please wait for GenLayer AI to complete your GitHub verification. You will be able to submit projects once finalized.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="py-12 flex flex-col items-center justify-center text-center">
+                      <div className="w-16 h-16 rounded-full bg-blue-500/20 flex items-center justify-center mb-6">
+                        <ShieldAlert className="w-8 h-8 text-blue-400" />
+                      </div>
+                      <h3 className="text-xl font-bold text-white mb-3">Developer Verification Required</h3>
+                      <p className="text-white/60 max-w-md mb-8">
+                        To submit projects for retroactive funding, you must first verify your identity by securely linking your GitHub account.
+                      </p>
+                      <Link href="/onboarding" className="px-8 py-3 bg-white text-black rounded-xl font-bold transition-all hover:bg-white/90">
+                        Verify GitHub Account
+                      </Link>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

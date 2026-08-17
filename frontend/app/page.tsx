@@ -7,14 +7,14 @@ import { useRouter } from "next/navigation";
 import { Sparkles, ArrowRight, ShieldCheck, Zap, Globe, Loader2 } from "lucide-react";
 
 export default function LandingPage() {
-  const { isConnected, connectWallet } = useWallet();
+  const { isConnected, connectWallet, address } = useWallet();
   const router = useRouter();
 
   const [isLoading, setIsLoading] = useState(false);
 
   const handleGetStarted = async () => {
     setIsLoading(true);
-    if (isConnected) {
+    if (isConnected && address) {
       router.push("/dashboard");
     } else {
       try {
