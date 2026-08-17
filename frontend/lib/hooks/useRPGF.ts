@@ -344,6 +344,7 @@ export function useVerifyGithub() {
         address: CONTRACT_ADDRESS as `0x${string}`,
         functionName: "verify_and_link_github",
         args: [profileUrl],
+        value: BigInt(0),
       });
 
       // Poll until accepted
