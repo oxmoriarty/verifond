@@ -13,7 +13,7 @@ export default function Dashboard() {
   const { isConnected, address, isLoading: walletLoading } = useWallet();
   const router = useRouter();
   
-  const [activeTab, setActiveTab] = useState<"MY_PROJECTS" | "SUBMIT">("MY_PROJECTS");
+  const [activeTab, setActiveTab] = useState<"MY_PROJECTS" | "SUBMIT" | "GLOBAL" | "TREASURY">("MY_PROJECTS");
   const [donateAmount, setDonateAmount] = useState("");
 
   const { data: onChainProjects = [], isLoading: projectsLoading } = useProjects();
