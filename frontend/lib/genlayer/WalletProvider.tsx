@@ -159,24 +159,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }));
     };
 
-    const handleDisconnect = () => {
-      setState((prev) => ({
-        ...prev,
-        address: null,
-        isConnected: false,
-      }));
-    };
-
     // Add event listeners
     provider.on("accountsChanged", handleAccountsChanged);
     provider.on("chainChanged", handleChainChanged);
-    provider.on("disconnect", handleDisconnect);
 
     // Cleanup
     return () => {
       provider.removeListener("accountsChanged", handleAccountsChanged);
       provider.removeListener("chainChanged", handleChainChanged);
-      provider.removeListener("disconnect", handleDisconnect);
     };
   }, []);
 
