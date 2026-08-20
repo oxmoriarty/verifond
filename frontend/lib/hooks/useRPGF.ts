@@ -170,7 +170,7 @@ export function useSubmitProject() {
       const txHash = await client.writeContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
         functionName: "submit_project",
-        args: [name, details, url, BigInt(Math.floor(amountRequested * 1e18))],
+        args: [name, details, url, BigInt(Math.floor(amountRequested))],
         value: BigInt(0),
       });
 

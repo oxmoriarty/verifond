@@ -131,7 +131,7 @@ class RPGFContract(gl.Contract):
         return username
 
     @gl.public.write
-    def submit_project(self, name: str, details: str, url: str, amount_requested: u256) -> u256:
+    def submit_project(self, name: str, details: str, url: str, amount_requested_gen: u256) -> u256:
         """Evaluates a project using GenLayer AI and stores the result."""
         
         sender = gl.message.sender_address.as_hex.lower()
@@ -163,7 +163,8 @@ class RPGFContract(gl.Contract):
         if repo_owner != self.linked_githubs[sender]:
             raise gl.vm.UserError(f"Ownership unverified. You are linked to '{self.linked_githubs[sender]}', but this repo belongs to '{repo_owner}'.")
             
-        requested_gen = int(amount_requested) // (10**18)
+        requested_gen = int(amount_requested_gen)
+        amount_requested_wei = u256(requested_gen) * (u256(10) ** u256(18))
 
         task = f"""
         Evaluate this project submission for Retroactive Public Goods Funding (RPGF).
@@ -257,12 +258,8 @@ class RPGFContract(gl.Contract):
         allocated_wei = u256(allocated_gen) * (u256(10) ** u256(18))
 
         # Cap at amount requested
-        if allocated_wei > amount_requested:
-            allocated_wei = amount_requested
-            
-        # Cap at treasury balance so we don't overspend
-        if allocated_wei > self.treasury:
-            allocated_wei = self.treasury
+        if allocated_wei > amount_requested_wei:
+            allocated_wei = amount_requested_wei
             
         if status == "Approved":
             self.submitted_urls[project_identity] = u256(999)
@@ -271,7 +268,7 @@ class RPGFContract(gl.Contract):
             if project_identity in self.submitted_urls:
                 current_attempts = int(self.submitted_urls[project_identity])
             self.submitted_urls[project_identity] = u256(current_attempts + 1)
-
+            
         project_id = self.next_project_id
         
         p = ProjectInfo(
@@ -279,7 +276,7 @@ class RPGFContract(gl.Contract):
             name=name,
             details=details,
             url=url,
-            amount_requested=amount_requested,
+            amount_requested=amount_requested_wei,
             status=status,
             reason=reason,
             score=u256(score_int),
