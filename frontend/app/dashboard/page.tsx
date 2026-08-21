@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useWallet } from "@/lib/genlayer/wallet";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -8,7 +8,7 @@ import { Navbar } from "@/components/Navbar";
 import { ProjectForm } from "@/components/ProjectForm";
 import { ProjectCard } from "@/components/ProjectCard";
 import { useProjects, usePendingProjects, useTreasury, useDonate, useCheckLinkedGithub, usePendingVerification } from "@/lib/hooks/useRPGF";
-import { Loader2, LayoutGrid, Globe, Coins, ShieldAlert, PlusCircle } from "lucide-react";
+import { Loader2, LayoutGrid, Globe, Coins, ShieldAlert, PlusCircle, Check, X } from "lucide-react";
 
 export default function Dashboard() {
   const { isConnected, address, isLoading: walletLoading } = useWallet();
@@ -24,6 +24,33 @@ export default function Dashboard() {
 
   const { data: linkedGithub, isLoading: isCheckingGithub } = useCheckLinkedGithub();
   const { data: pendingVerification, isLoading: isCheckingPending } = usePendingVerification();
+
+  const [showSuccessScreen, setShowSuccessScreen] = useState(false);
+  const [showFailedScreen, setShowFailedScreen] = useState(false);
+  
+  // Track previous pending state to detect transitions
+  const prevPendingRef = useRef(pendingVerification);
+  
+  useEffect(() => {
+    if (!isCheckingPending && !isCheckingGithub) {
+      const wasPending = !!prevPendingRef.current;
+      const isPendingNow = !!pendingVerification;
+      const isLinkedNow = !!linkedGithub;
+      
+      // Transition from pending to NOT pending
+      if (wasPending && !isPendingNow) {
+        if (isLinkedNow) {
+          setShowSuccessScreen(true);
+          setShowFailedScreen(false);
+        } else {
+          setShowFailedScreen(true);
+          setShowSuccessScreen(false);
+        }
+      }
+      
+      prevPendingRef.current = pendingVerification;
+    }
+  }, [pendingVerification, linkedGithub, isCheckingPending, isCheckingGithub]);
 
   useEffect(() => {
     if (!walletLoading && !isConnected) {
@@ -77,7 +104,11 @@ export default function Dashboard() {
             {/* Navigation Tabs */}
             <nav className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-2 flex flex-row md:flex-col gap-1 overflow-x-auto whitespace-nowrap scrollbar-hide">
               <button 
-                onClick={() => setActiveTab("SUBMIT")}
+                onClick={() => {
+                  setActiveTab("SUBMIT");
+                  setShowSuccessScreen(false);
+                  setShowFailedScreen(false);
+                }}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all flex-shrink-0 ${activeTab === "SUBMIT" ? "bg-white/10 text-white font-semibold" : "text-white/60 hover:bg-white/5 hover:text-white"}`}
               >
                 <PlusCircle className="w-5 h-5 flex-shrink-0" />
@@ -109,7 +140,11 @@ export default function Dashboard() {
             {/* Submit Project CTA */}
             {activeTab !== "SUBMIT" && (
               <button 
-                onClick={() => setActiveTab("SUBMIT")}
+                onClick={() => {
+                  setActiveTab("SUBMIT");
+                  setShowSuccessScreen(false);
+                  setShowFailedScreen(false);
+                }}
                 className="w-full py-4 bg-white text-black rounded-xl font-bold transition-all hover:bg-white/90"
               >
                 Submit New Project
@@ -123,7 +158,40 @@ export default function Dashboard() {
             {activeTab === "SUBMIT" && (
               <div className="space-y-8">
                 <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-8">
-                  {linkedGithub ? (
+                  {showSuccessScreen ? (
+                    <div className="py-12 flex flex-col items-center justify-center text-center">
+                      <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mb-6">
+                        <Check className="w-8 h-8 text-green-400" />
+                      </div>
+                      <h3 className="text-xl font-bold text-white mb-3">Verification Successful!</h3>
+                      <p className="text-white/60 max-w-md mb-8">
+                        Your wallet is verified and now securely linked to github.com/{linkedGithub}.
+                      </p>
+                      <button 
+                        onClick={() => setShowSuccessScreen(false)}
+                        className="px-8 py-3 bg-white text-black rounded-xl font-bold transition-all hover:bg-white/90"
+                      >
+                        Submit Project
+                      </button>
+                    </div>
+                  ) : showFailedScreen ? (
+                    <div className="py-12 flex flex-col items-center justify-center text-center">
+                      <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mb-6">
+                        <X className="w-8 h-8 text-red-400" />
+                      </div>
+                      <h3 className="text-xl font-bold text-white mb-3">Verification Failed</h3>
+                      <p className="text-white/60 max-w-md mb-8">
+                        We couldn't verify your identity. Please make sure your wallet address is exactly placed in your public GitHub bio and try again.
+                      </p>
+                      <Link 
+                        href="/onboarding" 
+                        onClick={() => setShowFailedScreen(false)}
+                        className="px-8 py-3 bg-white text-black rounded-xl font-bold transition-all hover:bg-white/90"
+                      >
+                        Verify Again
+                      </Link>
+                    </div>
+                  ) : linkedGithub ? (
                     <>
                       <h2 className="text-2xl font-bold text-white mb-6">Submit a Project</h2>
                       <ProjectForm />
