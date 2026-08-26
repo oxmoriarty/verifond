@@ -20,7 +20,8 @@ export function ProjectForm() {
     }
   };
 
-  const isFormValid = name.trim() !== "" && url.trim() !== "" && description.trim() !== "" && amount.trim() !== "" && isValidUrl(url) && !isNaN(Number(amount));
+  const isAmountValid = !isNaN(Number(amount)) && Number(amount) > 0 && Number(amount) <= 100;
+  const isFormValid = name.trim() !== "" && url.trim() !== "" && description.trim() !== "" && amount.trim() !== "" && isValidUrl(url) && isAmountValid;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,19 +91,27 @@ export function ProjectForm() {
       </div>
 
       <div className="space-y-2">
-        <label className="text-xs font-medium text-white/60 flex items-center gap-2">
-          <Coins className="w-3.5 h-3.5" />
-          Amount Requested (GEN)
-        </label>
+        <div className="flex justify-between items-center">
+          <label className="text-xs font-medium text-white/60 flex items-center gap-2">
+            <Coins className="w-3.5 h-3.5" />
+            Amount Requested (GEN)
+          </label>
+          <span className="text-[10px] text-white/40">Max 100 GEN</span>
+        </div>
         <input
           type="number"
-          placeholder="e.g. 5000"
+          placeholder="e.g. 50 (Max 100)"
+          min="1"
+          max="100"
           className="w-full bg-transparent border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-white/30 focus:outline-none transition-all placeholder:text-white/20 text-white"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           disabled={isSubmitting}
           required
         />
+        {amount && !isAmountValid && (
+          <p className="text-xs text-red-400">Amount must be between 1 and 100 GEN.</p>
+        )}
       </div>
 
       {error && (

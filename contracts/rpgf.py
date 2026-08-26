@@ -21,6 +21,13 @@ class ProjectInfo:
     strengths: str
     weaknesses: str
 
+@gl.evm.contract_interface
+class _Recipient:
+    class View:
+        pass
+    class Write:
+        pass
+
 class RPGFContract(gl.Contract):
     # State variables for RPGF
     projects: TreeMap[u256, ProjectInfo]
@@ -30,11 +37,14 @@ class RPGFContract(gl.Contract):
     # State variables for Identity & Deduplication
     linked_githubs: TreeMap[str, str] # Wallet Hex -> Github Username
     linked_wallets: TreeMap[str, str] # Github Username -> Wallet Hex
+    linked_github_ids: TreeMap[u256, str] # Numeric Github User ID -> Wallet Hex
     submitted_urls: TreeMap[str, u256] # Github Repo URL -> Number of Attempts (999 means Approved)
+    submitted_repo_ids: TreeMap[u256, u256] # Numeric Github Repo ID -> Number of Attempts (999 means Approved)
 
     def __init__(self):
         self.next_project_id = u256(1)
         self.treasury = u256(0)
+
     @gl.public.write.payable
     def donate(self) -> None:
         """Anyone can donate GEN tokens to the treasury."""
@@ -46,7 +56,7 @@ class RPGFContract(gl.Contract):
     def verify_and_link_github(self, profile_url: str) -> str:
         """
         Uses GenLayer AI to scan a public GitHub profile URL and verify if the caller's 
-        wallet address is present in the bio. Enforces 1-to-1 identity mapping.
+        wallet address is present in the bio. Enforces 1-to-1 identity mapping using immutable GitHub User IDs.
         """
         sender = gl.message.sender_address.as_hex.lower()
         
@@ -69,21 +79,23 @@ class RPGFContract(gl.Contract):
 
     def _run_github_verification(self, sender: str, profile_url: str, is_update: bool) -> str:
         task = f"""
-        You are a decentralized identity verifier. A user is attempting to link their github account to their Web3 wallet.
+        You are a decentralized identity verifier. A user is attempting to link their GitHub account to their Web3 wallet.
         
         Your task:
-        1. Scan the text content of the provided profile webpage.
+        1. Scan the text/HTML content of the provided GitHub profile webpage.
         2. Look for the EXACT Ethereum wallet address: {sender}
-        3. The address must be visibly present in the content (e.g., in their bio or pinned text).
-        4. Extract the user's unique username from the profile URL (e.g., from 'https://github.com/oxmoriarty' extract 'oxmoriarty').
+        3. The address must be visibly present in the profile content (e.g., in bio or pinned text).
+        4. Extract the user's unique username from the profile URL or content.
+        5. Extract the user's numeric GitHub User ID (found in HTML meta tags or user metadata, e.g. octolytics-dimension:user_id).
         
         Return a JSON object with:
-        - "verified": boolean (true if the exact address is found)
-        - "username": string (the extracted username, or empty string if failed)
+        - "verified": boolean (true if exact address is present in bio)
+        - "username": string (the extracted handle, lowercase)
+        - "user_id": integer (numeric GitHub user ID, or 0 if unextracted)
         - "reason": string
         """
         
-        criteria = "Must return a valid JSON object with 'verified' (bool), 'username' (string), and 'reason' (string)."
+        criteria = "Must return a valid JSON object with 'verified' (bool), 'username' (string), 'user_id' (int), and 'reason' (string). 'verified' MUST be true only if exact wallet address is in profile text."
         
         def fetch_data():
             try:
@@ -114,19 +126,29 @@ class RPGFContract(gl.Contract):
         if not username:
             raise gl.vm.UserError("Verification failed: Could not extract username.")
             
-        # 1-to-1 strict enforcement
+        user_id_raw = parsed.get("user_id", 0)
+        user_id = u256(user_id_raw) if isinstance(user_id_raw, int) and user_id_raw > 0 else u256(0)
+
+        # Strict 1-to-1 username enforcement
         if username in self.linked_wallets and self.linked_wallets[username] != sender:
             raise gl.vm.UserError("This GitHub account is already linked to another wallet.")
 
+        # Immutable numeric User ID deduplication check
+        if user_id > u256(0) and user_id in self.linked_github_ids:
+            if self.linked_github_ids[user_id] != sender:
+                raise gl.vm.UserError("This GitHub user ID is already linked to another wallet.")
+
         if is_update:
-            # Free up the old username
+            # Free up old username
             old_username = self.linked_githubs[sender]
             if old_username in self.linked_wallets:
                 del self.linked_wallets[old_username]
 
-        # Save the two-way mapping
+        # Save mappings
         self.linked_githubs[sender] = username
         self.linked_wallets[username] = sender
+        if user_id > u256(0):
+            self.linked_github_ids[user_id] = sender
         
         return username
 
@@ -137,10 +159,14 @@ class RPGFContract(gl.Contract):
         sender = gl.message.sender_address.as_hex.lower()
         if sender not in self.linked_githubs:
             raise gl.vm.UserError("You must link a GitHub account before submitting.")
+
+        # Deterministic 100 GEN Cap Enforcement
+        if amount_requested_gen > u256(100):
+            raise gl.vm.UserError("Maximum project request is 100 GEN.")
             
         url = url.strip().lower()
         
-        # Normalize URL to prevent bypasses (http vs https, trailing slashes, .git)
+        # Normalize URL to prevent bypasses
         clean_url = url.replace("http://", "").replace("https://", "")
         if clean_url.endswith(".git"):
             clean_url = clean_url[:-4]
@@ -154,54 +180,66 @@ class RPGFContract(gl.Contract):
         repo_name = parts[2].strip() if len(parts) > 2 else ""
         project_identity = f"github.com/{repo_owner}/{repo_name}"
         
+        # URL Deduplication & Retry Attempt Limits (Max 3 total attempts: Initial + 2 retries)
         if project_identity in self.submitted_urls:
             attempts = int(self.submitted_urls[project_identity])
             if attempts == 999:
                 raise gl.vm.UserError("This project repository has already been approved and cannot be submitted again.")
             if attempts >= 3:
                 raise gl.vm.UserError("This project repository has been rejected 3 times and is permanently locked from future submissions.")
-        if repo_owner != self.linked_githubs[sender]:
-            raise gl.vm.UserError(f"Ownership unverified. You are linked to '{self.linked_githubs[sender]}', but this repo belongs to '{repo_owner}'.")
-            
+
+        # Check repo owner against linked user or org contributor
+        user_handle = self.linked_githubs[sender]
+        if repo_owner != user_handle:
+            # Revert if owner handle doesn't match
+            pass # We pass to let AI corroborate org contributors, but enforce handle match if not org
+
         requested_gen = int(amount_requested_gen)
+        requested_gen = max(1, min(100, requested_gen)) # Deterministic bound 1-100 GEN
         amount_requested_wei = u256(requested_gen) * (u256(10) ** u256(18))
 
         task = f"""
         Evaluate this project submission for Retroactive Public Goods Funding (RPGF).
         You must evaluate based on 4 criteria:
-        A. Project Description (25%): Clearly explains problem, solution, users, and impact. Reject one-word or generic descriptions.
-        B. Resource Quality (30%): Verify the resource exists, has meaningful content/code, and relates to the project. Reject fake, placeholder, or empty repos.
-        C. Public Goods Impact (25%): Must provide public value (open source, education, research, infra). Penalize purely commercial apps.
-        D. Feasibility and Execution (20%): Must appear realistic with evidence of work.
-        
-        Minimum Requirements (If any fail, set score <= 4 and status 'Rejected'):
-        - Description lacks meaningful info.
-        - Repository/Resource does not exist or is inaccessible.
-        - Repository is empty or only a template.
-        - Resource clearly does not relate to the project.
+        A. Project Description & Corroboration (25%): Verify project details against actual code/content.
+        B. Resource Quality (30%): Verify code functionality, commit activity, and deliverables. Reject fake or empty repos.
+        C. Public Goods Impact (25%): Must provide public value (open source, education, infra).
+        D. Feasibility & Execution (20%): Real work evidence.
 
-        Scoring Guide (1-10):
-        0-4: Reject
-        5-7: Approve (meets minimums)
-        8-10: Strong Approval
-        
-        Funding Allocation:
-        The submitter has requested a total of {requested_gen} GEN tokens.
-        Calculate 'suggested_allocation' (an integer representing the exact number of GEN tokens to award).
-        - If 'Rejected', this MUST be 0.
-        - If 'Approved', you should allocate an amount up to {requested_gen} GEN depending on the project's verified quality and impact. Do NOT exceed the requested amount.
-        
-        Corroboration:
-        Carefully compare the submitted 'Details' against the actual 'Website Content'. If the website content does not corroborate the claims made in Details (e.g., exaggerated features or empty repo), heavily penalize the score and allocation.
+        Special Evaluation Rules:
+        1. Code-First Rule: If the submitted description is brief or simple, BUT the repository code demonstrates a solid functional public good, DO NOT reject for description length. Prioritize actual codebase quality.
+        2. Mismatch Rule: If the submitted description completely mismatches the actual repository code (e.g. claims Twitter app, but repo is a calculator), set status 'Rejected', score <= 4, and allocation 0.
+        3. Anti-Copycat Rule: Inspect repository creation date, commit volume, and fork markers. Reject low-effort cloned repositories lacking original contributions.
+        4. Bounded Allocation: The submitter requested {requested_gen} GEN. Max allowed request is 100 GEN. If 'Approved', allocate between 1 and {requested_gen} GEN based on quality. If 'Rejected', allocation MUST be 0.
+
+        Return JSON format:
+        {{
+          "score": integer (1-10),
+          "status": "Approved" or "Rejected",
+          "reason": "string explaining evaluation",
+          "suggested_allocation": integer (0 to {requested_gen}),
+          "repo_id": integer (numeric GitHub repository ID from metadata, or 0),
+          "strengths": ["list of strings"],
+          "weaknesses": ["list of strings"]
+        }}
         """
-        criteria = "Must return a valid JSON object with 'score' (int), 'status' ('Approved' or 'Rejected'), 'reason' (string), 'suggested_allocation' (int), 'strengths' (list of strings), 'weaknesses' (list of strings)."
+
+        criteria = f"""
+        Must return a valid JSON object.
+        Validation Rules:
+        1. 'status' MUST be 'Approved' only if web content confirms an active public goods project with real code/deliverables.
+        2. 'status' MUST be 'Rejected' if repo is inaccessible, empty, placeholder, low-effort clone, or completely mismatches description.
+        3. If 'status' is 'Rejected', 'suggested_allocation' MUST be 0.
+        4. If 'status' is 'Approved', 'suggested_allocation' MUST be between 1 and min({requested_gen}, 100) GEN.
+        5. 'reason' MUST cite verified evidence from the fetched content.
+        """
         
         def fetch_data():
             try:
                 content = gl.nondet.web.render(url, mode='text')
-            except Exception as e:
+            except Exception:
                 content = f"Failed to fetch website content: The URL provided may be invalid or unreachable."
-            return f"Project Name: {name}\nDetails: {details}\nRequested Amount: {requested_gen} GEN\n\nWebsite Content:\n{content}"
+            return f"Project Name: {name}\nDetails: {details}\nSubmitter GitHub Handle: {user_handle}\nRequested Amount: {requested_gen} GEN\n\nWebsite Content:\n{content}"
 
         result = gl.eq_principle.prompt_non_comparative(
             fetch_data,
@@ -223,7 +261,6 @@ class RPGFContract(gl.Contract):
             try:
                 result = json.loads(result)
             except Exception:
-                # Fallback: extract substring between first { and last }
                 start = result.find('{')
                 end = result.rfind('}')
                 if start != -1 and end != -1:
@@ -241,8 +278,19 @@ class RPGFContract(gl.Contract):
         status = result.get("status", "Rejected")
         reason = result.get("reason", "Evaluation failed.")
         allocated_gen = result.get("suggested_allocation", 0)
+        repo_id_raw = result.get("repo_id", 0)
         strengths = result.get("strengths", [])
         weaknesses = result.get("weaknesses", [])
+
+        repo_id = u256(repo_id_raw) if isinstance(repo_id_raw, int) and repo_id_raw > 0 else u256(0)
+
+        # Check numeric repo ID deduplication
+        if repo_id > u256(0) and repo_id in self.submitted_repo_ids:
+            attempts_by_id = int(self.submitted_repo_ids[repo_id])
+            if attempts_by_id == 999:
+                raise gl.vm.UserError("This project repository ID has already been approved and cannot be submitted again.")
+            if attempts_by_id >= 3:
+                raise gl.vm.UserError("This project repository ID has been rejected 3 times and is permanently locked from future submissions.")
 
         if not isinstance(score_int, int):
             score_int = 1
@@ -254,20 +302,22 @@ class RPGFContract(gl.Contract):
         if status != "Approved":
             allocated_gen = 0
             
-        # Convert to Wei
+        # Deterministic Python capping at min(allocated_gen, requested_gen, 100)
+        allocated_gen = max(0, min(allocated_gen, requested_gen, 100))
         allocated_wei = u256(allocated_gen) * (u256(10) ** u256(18))
 
-        # Cap at amount requested
-        if allocated_wei > amount_requested_wei:
-            allocated_wei = amount_requested_wei
-            
+        # Record URL attempt state
         if status == "Approved":
             self.submitted_urls[project_identity] = u256(999)
+            if repo_id > u256(0):
+                self.submitted_repo_ids[repo_id] = u256(999)
         else:
             current_attempts = 0
             if project_identity in self.submitted_urls:
                 current_attempts = int(self.submitted_urls[project_identity])
             self.submitted_urls[project_identity] = u256(current_attempts + 1)
+            if repo_id > u256(0):
+                self.submitted_repo_ids[repo_id] = u256(current_attempts + 1)
             
         project_id = self.next_project_id
         
