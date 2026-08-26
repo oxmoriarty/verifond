@@ -350,7 +350,7 @@ export function useCheckLinkedGithub() {
         
         // If we found a linked GitHub, delete any stale pending verification from Supabase
         if (username) {
-          fetch(`/api/pending-verifications?wallet=${address}`, { method: 'DELETE' }).catch(console.error);
+          fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`, { method: 'DELETE' }).catch(console.error);
         }
         
         return username;
@@ -367,11 +367,11 @@ export function usePendingVerification() {
   const { address } = useWallet();
 
   return useQuery({
-    queryKey: ["pendingVerification", address],
+    queryKey: ["pendingVerification", address?.toLowerCase()],
     queryFn: async () => {
       if (!address) return null;
       try {
-        const res = await fetch(`/api/pending-verifications?wallet=${address}`);
+        const res = await fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`);
         if (!res.ok) return null;
         return await res.json();
       } catch (e) {
@@ -408,16 +408,17 @@ export function useVerifyGithub() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           txHash,
-          wallet_address: address,
-          profile_url: profileUrl
-        })
-      }).catch(console.error);
+          wallet_address: address.toLowerCase(),
+          profile_url: profileUrl,
+          status: 'Pending'
+        }),
+      });
 
-      return txHash;
+      return { txHash, profileUrl };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["linkedGithub"] });
-      queryClient.invalidateQueries({ queryKey: ["pendingVerification"] });
+      queryClient.invalidateQueries({ queryKey: ["pendingVerification", address?.toLowerCase()] });
+      queryClient.invalidateQueries({ queryKey: ["linkedGithub", address?.toLowerCase()] });
       success("Verification Submitted!", { description: "Your transaction is submitted. GenLayer AI verification takes about 20 minutes to finalize on Testnet." });
     },
     onError: (err: any) => {
