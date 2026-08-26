@@ -14,7 +14,7 @@ export default function Onboarding() {
   
   const { data: linkedGithub, isLoading: isCheckingGithub } = useCheckLinkedGithub();
   const { data: pendingVerification, isLoading: isCheckingPending } = usePendingVerification();
-  const { mutate: verifyGithub, isPending: isVerifying, isError: isVerifyError, reset: resetVerify } = useVerifyGithub();
+  const { mutate: verifyGithub, isPending: isVerifying } = useVerifyGithub();
 
   const [githubUrl, setGithubUrl] = useState("");
   const [copied, setCopied] = useState(false);
@@ -22,13 +22,14 @@ export default function Onboarding() {
 
   const prevPendingRef = useRef(pendingVerification);
 
-  // Detect when pending verification completes or fails
+  // Detect when pending verification completes or fails on-chain
   useEffect(() => {
     if (!isCheckingPending && !isCheckingGithub) {
       const wasPending = !!prevPendingRef.current;
       const isPendingNow = !!pendingVerification;
       const isLinkedNow = !!linkedGithub;
 
+      // Only set failed if there WAS an approved pending verification that completed without linking
       if (wasPending && !isPendingNow && !isLinkedNow) {
         setVerificationFailed(true);
       }
@@ -56,16 +57,6 @@ export default function Onboarding() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleClearPending = async () => {
-    if (!address) return;
-    try {
-      await fetch(`/api/pending-verifications?wallet=${address}`, { method: 'DELETE' });
-      window.location.reload();
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
   if (walletLoading || isCheckingGithub || isCheckingPending) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
@@ -74,9 +65,10 @@ export default function Onboarding() {
     );
   }
 
-  const isPending = isVerifying || !!pendingVerification;
+  // Pending card shows ONLY after wallet approval (when pendingVerification exists on-chain)
+  const isPending = !!pendingVerification;
   const isVerified = !!linkedGithub;
-  const isFailed = verificationFailed || isVerifyError;
+  const isFailed = verificationFailed;
 
   return (
     <main className="min-h-screen bg-[#050505] text-white selection:bg-white/30 font-sans pb-24 relative overflow-hidden">
@@ -174,7 +166,7 @@ export default function Onboarding() {
                       Paste your GitHub profile link so GenLayer AI consensus can verify it.
                     </p>
 
-                    {/* FAILED STATE ALERT */}
+                    {/* FAILED STATE ALERT (Only shown when on-chain verification completes and fails) */}
                     {isFailed && !isPending && (
                       <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm flex items-start gap-3">
                         <AlertTriangle className="w-5 h-5 flex-shrink-0 text-red-400 mt-0.5" />
@@ -187,7 +179,7 @@ export default function Onboarding() {
                       </div>
                     )}
 
-                    {/* PENDING STATE BANNER */}
+                    {/* PENDING STATE BANNER (Shows ONLY after transaction approval in wallet) */}
                     {isPending ? (
                       <div className="space-y-4">
                         <input
@@ -196,20 +188,11 @@ export default function Onboarding() {
                           disabled
                           className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white/50 cursor-not-allowed"
                         />
-                        <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0" />
-                            <p className="text-xs text-amber-300 font-medium">
-                              Verification Pending. You can leave this page while we verify.
-                            </p>
-                          </div>
-                          <button
-                            onClick={handleClearPending}
-                            className="text-[11px] text-amber-400 hover:underline shrink-0"
-                            title="Reset verification state"
-                          >
-                            Reset
-                          </button>
+                        <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-3">
+                          <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0" />
+                          <p className="text-xs text-amber-300 font-medium">
+                            Verification Pending. You can leave this page while we verify.
+                          </p>
                         </div>
                         <Link
                           href="/dashboard"
@@ -230,21 +213,30 @@ export default function Onboarding() {
                               setGithubUrl(e.target.value);
                               if (isFailed) {
                                 setVerificationFailed(false);
-                                resetVerify();
                               }
                             }}
                             placeholder="https://github.com/username"
                             required
-                            className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all"
+                            disabled={isVerifying}
+                            className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all disabled:opacity-60"
                           />
                         </div>
                         <button
                           type="submit"
-                          disabled={!githubUrl}
+                          disabled={isVerifying || !githubUrl}
                           className="w-full bg-white text-black py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-white/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          Verify and Link
-                          <ArrowRight className="w-4 h-4" />
+                          {isVerifying ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Confirming in Wallet...
+                            </>
+                          ) : (
+                            <>
+                              Verify and Link
+                              <ArrowRight className="w-4 h-4" />
+                            </>
+                          )}
                         </button>
                       </form>
                     )}
@@ -276,3 +268,4 @@ export default function Onboarding() {
     </main>
   );
 }
+

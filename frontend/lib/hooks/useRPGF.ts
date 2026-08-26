@@ -421,7 +421,12 @@ export function useVerifyGithub() {
       success("Verification Submitted!", { description: "Your transaction is submitted. GenLayer AI verification takes about 20 minutes to finalize on Testnet." });
     },
     onError: (err: any) => {
-      error("Verification Failed", { description: getFriendlyErrorMessage(err, "Failed to submit verification. Please try again.") });
+      const msg = typeof err === 'string' ? err : (err?.message || '');
+      if (msg.includes("rejected") || msg.includes("User denied") || msg.includes("cancelled")) {
+        error("Transaction Cancelled", { description: "You cancelled the transaction. Verification was not started." });
+      } else {
+        error("Verification Submission Failed", { description: getFriendlyErrorMessage(err, "Failed to submit verification. Please try again.") });
+      }
     }
   });
 }
