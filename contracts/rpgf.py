@@ -128,15 +128,17 @@ class RPGFContract(gl.Contract):
             
         user_id_raw = parsed.get("user_id", 0)
         user_id = u256(user_id_raw) if isinstance(user_id_raw, int) and user_id_raw > 0 else u256(0)
+        
+        if user_id == u256(0):
+            raise gl.vm.UserError("Verification failed: Could not establish numeric GitHub User ID.")
 
         # Strict 1-to-1 username enforcement
         if username in self.linked_wallets and self.linked_wallets[username] != sender:
             raise gl.vm.UserError("This GitHub account is already linked to another wallet.")
 
         # Immutable numeric User ID deduplication check
-        if user_id > u256(0) and user_id in self.linked_github_ids:
-            if self.linked_github_ids[user_id] != sender:
-                raise gl.vm.UserError("This GitHub user ID is already linked to another wallet.")
+        if user_id in self.linked_github_ids and self.linked_github_ids[user_id] != sender:
+            raise gl.vm.UserError("This GitHub user ID is already linked to another wallet.")
 
         if is_update:
             # Free up old username
@@ -188,11 +190,10 @@ class RPGFContract(gl.Contract):
             if attempts >= 3:
                 raise gl.vm.UserError("This project repository has been rejected 3 times and is permanently locked from future submissions.")
 
-        # Check repo owner against linked user or org contributor
+        # Check repo owner against linked user exactly
         user_handle = self.linked_githubs[sender]
         if repo_owner != user_handle:
-            # Revert if owner handle doesn't match
-            pass # We pass to let AI corroborate org contributors, but enforce handle match if not org
+            raise gl.vm.UserError(f"Ownership unverified: Your linked GitHub is '{user_handle}', but this repository belongs to '{repo_owner}'.")
 
         requested_gen = int(amount_requested_gen)
         requested_gen = max(1, min(100, requested_gen)) # Deterministic bound 1-100 GEN
@@ -238,8 +239,14 @@ class RPGFContract(gl.Contract):
             try:
                 content = gl.nondet.web.render(url, mode='text')
             except Exception:
-                content = f"Failed to fetch website content: The URL provided may be invalid or unreachable."
-            return f"Project Name: {name}\nDetails: {details}\nSubmitter GitHub Handle: {user_handle}\nRequested Amount: {requested_gen} GEN\n\nWebsite Content:\n{content}"
+                content = "Failed to fetch website content: The URL provided may be invalid or unreachable."
+                
+            try:
+                api_content = gl.nondet.web.render(f"https://api.github.com/repos/{repo_owner}/{repo_name}", mode='text')
+            except Exception:
+                api_content = "Failed to fetch GitHub API data."
+                
+            return f"Project Name: {name}\nDetails: {details}\nSubmitter GitHub Handle: {user_handle}\nRequested Amount: {requested_gen} GEN\n\nGitHub API Repo Data:\n{api_content}\n\nWebsite Content:\n{content}"
 
         result = gl.eq_principle.prompt_non_comparative(
             fetch_data,
@@ -284,8 +291,12 @@ class RPGFContract(gl.Contract):
 
         repo_id = u256(repo_id_raw) if isinstance(repo_id_raw, int) and repo_id_raw > 0 else u256(0)
 
+        # Enforce mandatory numeric repo ID for deduplication
+        if repo_id == u256(0):
+            raise gl.vm.UserError("Failed to extract numeric repository ID. This is required to prevent duplicates.")
+
         # Check numeric repo ID deduplication
-        if repo_id > u256(0) and repo_id in self.submitted_repo_ids:
+        if repo_id in self.submitted_repo_ids:
             attempts_by_id = int(self.submitted_repo_ids[repo_id])
             if attempts_by_id == 999:
                 raise gl.vm.UserError("This project repository ID has already been approved and cannot be submitted again.")
