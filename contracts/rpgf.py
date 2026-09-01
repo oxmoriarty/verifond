@@ -102,7 +102,17 @@ class RPGFContract(gl.Contract):
                 content = gl.nondet.web.render(profile_url, mode='text')
             except Exception:
                 content = f"Failed to fetch webpage content for {profile_url}."
-            return f"Profile URL: {profile_url}\n\nWebpage Content:\n{content}"
+                
+            try:
+                # Extract username from URL to hit the API
+                clean_url = profile_url.replace("http://", "").replace("https://", "").rstrip("/")
+                parts = clean_url.split("/")
+                api_username = parts[-1] if len(parts) > 1 else ""
+                api_content = gl.nondet.web.render(f"https://api.github.com/users/{api_username}", mode='text') if api_username else "No username found."
+            except Exception:
+                api_content = "Failed to fetch GitHub API data."
+                
+            return f"Profile URL: {profile_url}\n\nGitHub API User Data:\n{api_content}\n\nWebpage Content:\n{content}"
 
         result = gl.eq_principle.prompt_non_comparative(fetch_data, task=task, criteria=criteria)
         
@@ -220,6 +230,7 @@ class RPGFContract(gl.Contract):
           "reason": "string explaining evaluation",
           "suggested_allocation": integer (0 to {requested_gen}),
           "repo_id": integer (numeric GitHub repository ID from metadata, or 0),
+          "repo_owner_id": integer (numeric GitHub user ID of the repository owner from API data, or 0),
           "strengths": ["list of strings"],
           "weaknesses": ["list of strings"]
         }}
@@ -286,14 +297,23 @@ class RPGFContract(gl.Contract):
         reason = result.get("reason", "Evaluation failed.")
         allocated_gen = result.get("suggested_allocation", 0)
         repo_id_raw = result.get("repo_id", 0)
+        repo_owner_id_raw = result.get("repo_owner_id", 0)
         strengths = result.get("strengths", [])
         weaknesses = result.get("weaknesses", [])
 
         repo_id = u256(repo_id_raw) if isinstance(repo_id_raw, int) and repo_id_raw > 0 else u256(0)
+        repo_owner_id = u256(repo_owner_id_raw) if isinstance(repo_owner_id_raw, int) and repo_owner_id_raw > 0 else u256(0)
 
         # Enforce mandatory numeric repo ID for deduplication
         if repo_id == u256(0):
             raise gl.vm.UserError("Failed to extract numeric repository ID. This is required to prevent duplicates.")
+            
+        # Enforce strict numeric User ID ownership matching
+        if repo_owner_id == u256(0):
+            raise gl.vm.UserError("Failed to extract numeric repository owner ID.")
+            
+        if repo_owner_id not in self.linked_github_ids or self.linked_github_ids[repo_owner_id] != sender:
+            raise gl.vm.UserError("Ownership unverified: The numeric User ID of this repository's owner does not match your linked identity.")
 
         # Check numeric repo ID deduplication
         if repo_id in self.submitted_repo_ids:

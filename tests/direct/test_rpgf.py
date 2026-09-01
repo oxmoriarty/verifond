@@ -35,6 +35,7 @@ def test_submit_project(direct_vm, direct_deploy, direct_alice):
         "reason": "Great public good project!",
         "suggested_allocation": 50,
         "repo_id": 987654,
+        "repo_owner_id": 123456,
         "strengths": ["Open source"],
         "weaknesses": ["Small team"]
     })

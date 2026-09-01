@@ -32,7 +32,7 @@ function getFriendlyErrorMessage(err: any, defaultMsg: string): string {
   if (msg.includes("Ownership unverified")) {
     return "Ownership unverified. The repository owner does not match your linked GitHub account.";
   }
-  if (msg.includes("Failed to extract numeric repository ID")) {
+  if (msg.includes("Failed to extract numeric repository ID") || msg.includes("Failed to extract numeric repository owner ID")) {
     return "Could not determine the repository ID. Please ensure the GitHub URL is correct.";
   }
   if (msg.includes("rejected") || msg.includes("User denied")) {
