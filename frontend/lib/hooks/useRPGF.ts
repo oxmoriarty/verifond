@@ -412,7 +412,7 @@ export function useVerifyGithub() {
       });
 
       // Post pending verification to Supabase backend
-      await fetch('/api/pending-verifications', {
+      const res = await fetch('/api/pending-verifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -422,6 +422,11 @@ export function useVerifyGithub() {
           status: 'Pending'
         }),
       });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error("Supabase Database Error during POST:", errorText);
+      }
 
       return { txHash, profileUrl };
     },
