@@ -26,7 +26,7 @@ export default function Onboarding() {
   // Detect when pending verification completes or fails on-chain
   useEffect(() => {
     if (!isCheckingPending && !isCheckingGithub) {
-      const wasPending = !!prevPendingRef.current || !!localPendingUrl;
+      const wasPending = !!prevPendingRef.current;
       const isPendingNow = !!pendingVerification;
       const isLinkedNow = !!linkedGithub;
 
