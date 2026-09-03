@@ -8,7 +8,7 @@ import { Navbar } from "@/components/Navbar";
 import { ProjectForm } from "@/components/ProjectForm";
 import { ProjectCard } from "@/components/ProjectCard";
 import { useProjects, usePendingProjects, useTreasury, useDonate, useCheckLinkedGithub, usePendingVerification } from "@/lib/hooks/useRPGF";
-import { Loader2, LayoutGrid, Globe, Coins, ShieldAlert, PlusCircle, Check, X } from "lucide-react";
+import { Loader2, LayoutGrid, Globe, Coins, ShieldAlert, PlusCircle, Check, X, Github, CheckCircle2 } from "lucide-react";
 
 export default function Dashboard() {
   const { isConnected, address, isLoading: walletLoading } = useWallet();
@@ -96,9 +96,22 @@ export default function Dashboard() {
                   </Link>
                 )}
               </p>
-              <p className="text-white font-mono text-sm truncate">
-                {linkedGithub ? `@${linkedGithub}` : (pendingVerification ? "Verification Pending..." : "Not Linked")}
-              </p>
+              <div className="text-white font-mono text-sm truncate flex items-center gap-2">
+                {linkedGithub ? (
+                  <>
+                    <Github className="w-4 h-4 text-white/70" />
+                    @{linkedGithub}
+                    <CheckCircle2 className="w-4 h-4 text-green-400" />
+                  </>
+                ) : pendingVerification ? (
+                  <Link href="/onboarding" className="text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Verification Pending...
+                  </Link>
+                ) : (
+                  <span className="text-white/40">Not Linked</span>
+                )}
+              </div>
             </div>
 
             {/* Navigation Tabs */}
