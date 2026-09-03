@@ -203,7 +203,7 @@ export default function Dashboard() {
                       </div>
                       <h3 className="text-xl font-bold text-white mb-3">Verification Pending...</h3>
                       <p className="text-white/60 max-w-md">
-                        Please wait for GenLayer AI to complete your GitHub verification. You will be able to submit projects once finalized.
+                        Please wait while we link and verify your Github account. You will be able to submit projects once verified.
                       </p>
                     </div>
                   ) : (
