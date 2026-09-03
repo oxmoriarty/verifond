@@ -373,25 +373,48 @@ export function useCheckLinkedGithub() {
 }
 
 export function usePendingVerification() {
-  const { address } = useWallet();
+    const { address } = useWallet();
+  
+    return useQuery({
+      queryKey: ["pendingVerification", address?.toLowerCase()],
+      queryFn: async () => {
+        if (!address) return null;
+        try {
+          const res = await fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`);
+          if (!res.ok) return null;
+          const pendingData = await res.json();
+          
+          if (!pendingData) return null;
+          
+          // Check if transaction has finalized on chain
+          if (pendingData.tx_hash) {
+            try {
+              const client = await getClient();
+              const receipt = await client.getTransactionReceipt({ 
+                hash: pendingData.tx_hash as `0x${string}` 
+              });
+              
+              // If we get a receipt, the transaction is finalized (success or reverted).
+              // Delete it from the pending queue.
+              if (receipt) {
+                await fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`, { method: 'DELETE' }).catch(console.error);
+                return null; // No longer pending
+              }
+            } catch (e) {
+              // TransactionReceiptNotFoundError means it is still pending. We do nothing and keep it pending.
+            }
+          }
 
-  return useQuery({
-    queryKey: ["pendingVerification", address?.toLowerCase()],
-    queryFn: async () => {
-      if (!address) return null;
-      try {
-        const res = await fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`);
-        if (!res.ok) return null;
-        return await res.json();
-      } catch (e) {
-        console.error("Failed to fetch pending verification", e);
-        return null;
-      }
-    },
-    enabled: !!address,
-    refetchInterval: 10000,
-  });
-}
+          return pendingData;
+        } catch (e) {
+          console.error("Failed to fetch pending verification", e);
+          return null;
+        }
+      },
+      enabled: !!address,
+      refetchInterval: 10000,
+    });
+  }
 
 export function useVerifyGithub() {
   const { address } = useWallet();
