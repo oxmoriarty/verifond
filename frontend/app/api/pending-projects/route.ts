@@ -27,7 +27,7 @@ export async function POST(req: Request) {
       .from('pending_projects')
       .insert([
         {
-          txHash,
+          tx_hash: txHash,
           submitter,
           name,
           details,
@@ -61,7 +61,7 @@ export async function DELETE(req: Request) {
     const { error } = await supabase
       .from('pending_projects')
       .delete()
-      .eq('txHash', txHash);
+      .eq('tx_hash', txHash);
 
     if (error) throw error;
 

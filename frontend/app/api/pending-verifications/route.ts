@@ -36,7 +36,7 @@ export async function POST(req: Request) {
       .from('pending_verifications')
       .insert([
         {
-          txHash,
+          tx_hash: txHash,
           wallet_address: wallet_address.toLowerCase(),
           profile_url,
           status: 'Pending'
