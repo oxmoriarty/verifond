@@ -121,7 +121,39 @@ export function usePendingProjects() {
       try {
         const response = await fetch('/api/pending-projects');
         if (!response.ok) throw new Error("Failed to fetch pending projects");
-        return await response.json();
+        const pendingProjects: Project[] = await response.json();
+        
+        if (!pendingProjects || pendingProjects.length === 0) return [];
+
+        const activeProjects: Project[] = [];
+        const client = await getClient();
+
+        // Check the transaction receipt for each pending project
+        for (const project of pendingProjects) {
+          const hash = project.txHash || (project as any).tx_hash;
+          if (hash) {
+            try {
+              const receipt = await client.getTransactionReceipt({ 
+                hash: hash as `0x${string}` 
+              });
+              
+              // If we get a receipt, the transaction is finalized (either success or failed)
+              // Delete it from the Supabase pending queue
+              if (receipt) {
+                await fetch(`/api/pending-projects?txHash=${hash}`, { method: 'DELETE' }).catch(console.error);
+                continue; // Skip adding this to the active list
+              }
+            } catch (e) {
+              // TransactionReceiptNotFoundError means it is still pending on chain.
+              activeProjects.push(project);
+            }
+          } else {
+            // No hash found, just keep it
+            activeProjects.push(project);
+          }
+        }
+
+        return activeProjects;
       } catch (err) {
         console.error("Error fetching pending projects:", err);
         return [];
@@ -387,11 +419,12 @@ export function usePendingVerification() {
           if (!pendingData) return null;
           
           // Check if transaction has finalized on chain
-          if (pendingData.tx_hash) {
+          const hash = pendingData.tx_hash || pendingData.txHash || pendingData.txhash;
+          if (hash) {
             try {
               const client = await getClient();
               const receipt = await client.getTransactionReceipt({ 
-                hash: pendingData.tx_hash as `0x${string}` 
+                hash: hash as `0x${string}` 
               });
               
               // If we get a receipt, the transaction is finalized (success or reverted).
@@ -400,8 +433,10 @@ export function usePendingVerification() {
                 await fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`, { method: 'DELETE' }).catch(console.error);
                 return null; // No longer pending
               }
-            } catch (e) {
-              // TransactionReceiptNotFoundError means it is still pending. We do nothing and keep it pending.
+            } catch (e: any) {
+              // If it's literally just not found yet, keep pending.
+              // Otherwise, log the error so we can see why it's failing to fetch the receipt!
+              console.error("getTransactionReceipt error:", e);
             }
           }
 
