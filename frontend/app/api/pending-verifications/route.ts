@@ -73,3 +73,26 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+export async function PATCH(req: Request) {
+  try {
+    const body = await req.json();
+    const { wallet_address, status } = body;
+
+    if (!wallet_address || !status) {
+      return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
+    }
+
+    const { data, error } = await supabase
+      .from('pending_verifications')
+      .update({ status })
+      .eq('wallet_address', wallet_address.toLowerCase())
+      .select();
+
+    if (error) throw error;
+
+    return NextResponse.json(data?.[0] || null);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}

@@ -431,7 +431,10 @@ export function usePendingVerification() {
           if (!res.ok) return null;
           const pendingData = await res.json();
           
-          if (!pendingData) return null;
+          // If the record is already explicitly marked as Failed in the DB, just return it so the UI shows failure.
+          if (pendingData.status === 'Failed') {
+            return pendingData;
+          }
           
           // Check if transaction has finalized on chain
           const hash = pendingData.tx_hash || pendingData.txHash || pendingData.txhash;
@@ -442,24 +445,37 @@ export function usePendingVerification() {
                 hash: hash as `0x${string}` 
               });
               
-              // If we get a receipt, the transaction is finalized (success or reverted).
-              // Delete it from the pending queue.
               if (receipt) {
-                await fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`, { method: 'DELETE' }).catch(console.error);
-                return null; // No longer pending
+                if (receipt.status === 'reverted') {
+                  // Transaction failed on-chain. Update Supabase so the UI permanently knows it failed.
+                  await fetch(`/api/pending-verifications`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ wallet_address: address.toLowerCase(), status: 'Failed' })
+                  }).catch(console.error);
+                  return { ...pendingData, status: 'Failed' };
+                } else {
+                  // Transaction succeeded. Safe to delete.
+                  await fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`, { method: 'DELETE' }).catch(console.error);
+                  return null;
+                }
               }
             } catch (e: any) {
               // If we get an error (like TransactionReceiptNotFoundError), it might still be pending.
               // However, if it has been pending for more than 2 minutes, GenLayer likely dropped the transaction.
-              // We should auto-clear it so the user's UI doesn't get permanently stuck.
+              // We should auto-update it to Failed so the user's UI doesn't get permanently stuck.
               if (pendingData.created_at) {
                 const createdTime = new Date(pendingData.created_at).getTime();
                 const ageInMinutes = (Date.now() - createdTime) / 1000 / 60;
                 
                 if (ageInMinutes > 2) {
-                  console.error("Transaction pending for >2 minutes without a receipt. Assuming dropped. Clearing state...");
-                  await fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`, { method: 'DELETE' }).catch(console.error);
-                  return null;
+                  console.error("Transaction pending for >2 minutes without a receipt. Assuming dropped.");
+                  await fetch(`/api/pending-verifications`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ wallet_address: address.toLowerCase(), status: 'Failed' })
+                  }).catch(console.error);
+                  return { ...pendingData, status: 'Failed' };
                 }
               }
             }

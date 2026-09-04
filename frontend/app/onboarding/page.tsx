@@ -72,9 +72,9 @@ export default function Onboarding() {
   }
 
   // Pending card shows ONLY after wallet approval (when pendingVerification exists on-chain or locally approved)
-  const isPending = !!pendingVerification || !!localPendingUrl;
+  const isFailed = verificationFailed || pendingVerification?.status === 'Failed';
+  const isPending = (!!pendingVerification && pendingVerification?.status !== 'Failed') || !!localPendingUrl;
   const isVerified = !!linkedGithub;
-  const isFailed = verificationFailed;
 
   return (
     <main className="min-h-screen bg-[#050505] text-white selection:bg-white/30 font-sans pb-24 relative overflow-hidden">

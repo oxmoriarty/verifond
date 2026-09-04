@@ -103,7 +103,7 @@ export default function Dashboard() {
                     @{linkedGithub}
                     <CheckCircle2 className="w-4 h-4 text-green-400" />
                   </>
-                ) : pendingVerification ? (
+                ) : pendingVerification && pendingVerification.status !== 'Failed' ? (
                   <Link href="/onboarding" className="text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Verification Pending...
@@ -187,7 +187,7 @@ export default function Dashboard() {
                         Submit Project
                       </button>
                     </div>
-                  ) : showFailedScreen ? (
+                  ) : showFailedScreen || pendingVerification?.status === 'Failed' ? (
                     <div className="py-12 flex flex-col items-center justify-center text-center">
                       <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mb-6">
                         <X className="w-8 h-8 text-red-400" />
@@ -209,7 +209,7 @@ export default function Dashboard() {
                       <h2 className="text-2xl font-bold text-white mb-6">Submit a Project</h2>
                       <ProjectForm />
                     </>
-                  ) : pendingVerification ? (
+                  ) : pendingVerification && pendingVerification.status !== 'Failed' ? (
                     <div className="py-12 flex flex-col items-center justify-center text-center">
                       <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mb-6">
                         <Loader2 className="w-8 h-8 text-white/50 animate-spin" />
