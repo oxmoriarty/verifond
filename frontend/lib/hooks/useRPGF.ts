@@ -143,9 +143,23 @@ export function usePendingProjects() {
                 await fetch(`/api/pending-projects?txHash=${hash}`, { method: 'DELETE' }).catch(console.error);
                 continue; // Skip adding this to the active list
               }
-            } catch (e) {
+            } catch (e: any) {
               // TransactionReceiptNotFoundError means it is still pending on chain.
-              activeProjects.push(project);
+              // Fallback: If pending for > 2 minutes, assume Genlayer dropped it.
+              let isDropped = false;
+              if (project.created_at) {
+                const createdTime = new Date(project.created_at).getTime();
+                const ageInMinutes = (Date.now() - createdTime) / 1000 / 60;
+                if (ageInMinutes > 2) {
+                  console.error("Project pending for >2 minutes. Assuming dropped. Clearing state...");
+                  await fetch(`/api/pending-projects?txHash=${hash}`, { method: 'DELETE' }).catch(console.error);
+                  isDropped = true;
+                }
+              }
+              
+              if (!isDropped) {
+                activeProjects.push(project);
+              }
             }
           } else {
             // No hash found, just keep it
@@ -434,9 +448,19 @@ export function usePendingVerification() {
                 return null; // No longer pending
               }
             } catch (e: any) {
-              // If it's literally just not found yet, keep pending.
-              // Otherwise, log the error so we can see why it's failing to fetch the receipt!
-              console.error("getTransactionReceipt error:", e);
+              // If we get an error (like TransactionReceiptNotFoundError), it might still be pending.
+              // However, if it has been pending for more than 2 minutes, GenLayer likely dropped the transaction.
+              // We should auto-clear it so the user's UI doesn't get permanently stuck.
+              if (pendingData.created_at) {
+                const createdTime = new Date(pendingData.created_at).getTime();
+                const ageInMinutes = (Date.now() - createdTime) / 1000 / 60;
+                
+                if (ageInMinutes > 2) {
+                  console.error("Transaction pending for >2 minutes without a receipt. Assuming dropped. Clearing state...");
+                  await fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`, { method: 'DELETE' }).catch(console.error);
+                  return null;
+                }
+              }
             }
           }
 
