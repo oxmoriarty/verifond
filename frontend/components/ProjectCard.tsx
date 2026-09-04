@@ -10,6 +10,7 @@ export function ProjectCard({ project }: { project: Project }) {
   if (project.status === "Approved") statusColor = "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
   if (project.status === "Rejected") statusColor = "bg-red-500/20 text-red-400 border-red-500/30";
   if (project.status === "Pending") statusColor = "bg-blue-500/20 text-blue-400 border-blue-500/30";
+  if (project.status === "Failed") statusColor = "bg-red-500/10 text-red-500 border-red-500/20";
 
   const identifier = project.id || project.txHash;
 

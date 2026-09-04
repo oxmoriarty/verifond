@@ -131,6 +131,11 @@ export function usePendingProjects() {
 
         // Check the transaction receipt for each pending project
         for (const project of pendingProjects) {
+          if (project.status === 'Failed') {
+            activeProjects.push(project);
+            continue;
+          }
+
           const hash = project.txHash || (project as any).tx_hash;
           if (hash) {
             try {
@@ -138,11 +143,20 @@ export function usePendingProjects() {
                 hash: hash as `0x${string}` 
               });
               
-              // If we get a receipt, the transaction is finalized (either success or failed)
-              // Delete it from the Supabase pending queue
               if (receipt) {
-                await fetch(`/api/pending-projects?txHash=${hash}`, { method: 'DELETE' }).catch(console.error);
-                continue; // Skip adding this to the active list
+                if (receipt.status === 'reverted') {
+                  // Update to failed
+                  await fetch(`/api/pending-projects`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ txHash: hash, status: 'Failed' })
+                  }).catch(console.error);
+                  activeProjects.push({ ...project, status: 'Failed', reason: 'Project submission failed or was rejected.' });
+                } else {
+                  // Success, delete from pending queue
+                  await fetch(`/api/pending-projects?txHash=${hash}`, { method: 'DELETE' }).catch(console.error);
+                }
+                continue;
               }
             } catch (e: any) {
               // TransactionReceiptNotFoundError means it is still pending on chain.
@@ -152,8 +166,13 @@ export function usePendingProjects() {
                 const createdTime = new Date(project.created_at).getTime();
                 const ageInMinutes = (Date.now() - createdTime) / 1000 / 60;
                 if (ageInMinutes > 2) {
-                  console.error("Project pending for >2 minutes. Assuming dropped. Clearing state...");
-                  await fetch(`/api/pending-projects?txHash=${hash}`, { method: 'DELETE' }).catch(console.error);
+                  console.error("Project pending for >2 minutes. Assuming dropped.");
+                  await fetch(`/api/pending-projects`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ txHash: hash, status: 'Failed' })
+                  }).catch(console.error);
+                  activeProjects.push({ ...project, status: 'Failed', reason: 'Project submission was dropped.' });
                   isDropped = true;
                 }
               }
@@ -250,7 +269,24 @@ export function useSubmitProject() {
 
       return txHash;
     },
-    onSuccess: () => {
+    onSuccess: (txHash, variables) => {
+      // Optimistically add the project to the pending projects cache to prevent empty state flashes
+      queryClient.setQueryData(["projects", "pending"], (old: any) => {
+        const newProject = {
+          txHash,
+          submitter: address,
+          name: variables.name,
+          details: variables.details,
+          url: variables.url,
+          amount_requested: variables.amountRequested,
+          status: 'Pending',
+          score: 0,
+          reason: 'Waiting for GenLayer AI Evaluation...',
+          withdrawn: false
+        };
+        return old ? [newProject, ...old] : [newProject];
+      });
+
       queryClient.invalidateQueries({ queryKey: ["projects", "pending"] });
       setIsSubmitting(false);
       success("Submission Sent!", {

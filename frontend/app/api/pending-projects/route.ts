@@ -70,3 +70,26 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+export async function PATCH(req: Request) {
+  try {
+    const body = await req.json();
+    const { txHash, status, reason } = body;
+
+    if (!txHash || !status) {
+      return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
+    }
+
+    const { data, error } = await supabase
+      .from('pending_projects')
+      .update({ status, reason: reason || 'Project submission failed or was dropped.' })
+      .eq('tx_hash', txHash)
+      .select();
+
+    if (error) throw error;
+
+    return NextResponse.json(data?.[0] || null);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
