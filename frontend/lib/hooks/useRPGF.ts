@@ -21,6 +21,7 @@ export interface Project {
   strengths?: string[];
   weaknesses?: string[];
   txHash?: string; // Only present for pending projects from Supabase
+  created_at?: string;
 }
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "";
