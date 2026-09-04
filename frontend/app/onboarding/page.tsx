@@ -18,26 +18,7 @@ export default function Onboarding() {
 
   const [githubUrl, setGithubUrl] = useState("");
   const [copied, setCopied] = useState(false);
-  const [verificationFailed, setVerificationFailed] = useState(false);
   const [localPendingUrl, setLocalPendingUrl] = useState<string | null>(null);
-
-  const prevPendingRef = useRef(pendingVerification);
-
-  // Detect when pending verification completes or fails on-chain
-  useEffect(() => {
-    if (!isCheckingPending && !isCheckingGithub) {
-      const wasPending = !!prevPendingRef.current;
-      const isPendingNow = !!pendingVerification;
-      const isLinkedNow = !!linkedGithub;
-
-      // Only set failed if there WAS an approved pending verification that completed without linking
-      if (wasPending && !isPendingNow && !isLinkedNow) {
-        setVerificationFailed(true);
-        setLocalPendingUrl(null);
-      }
-      prevPendingRef.current = pendingVerification;
-    }
-  }, [pendingVerification, linkedGithub, isCheckingPending, isCheckingGithub, localPendingUrl]);
 
   useEffect(() => {
     if (!walletLoading && !isConnected) {
@@ -48,7 +29,6 @@ export default function Onboarding() {
   const handleVerify = (e: React.FormEvent) => {
     e.preventDefault();
     if (!githubUrl) return;
-    setVerificationFailed(false);
     verifyGithub(githubUrl, {
       onSuccess: () => {
         setLocalPendingUrl(githubUrl);
@@ -72,7 +52,7 @@ export default function Onboarding() {
   }
 
   // Pending card shows ONLY after wallet approval (when pendingVerification exists on-chain or locally approved)
-  const isFailed = verificationFailed || pendingVerification?.status === 'Failed';
+  const isFailed = pendingVerification?.status === 'Failed';
   const isPending = (!!pendingVerification && pendingVerification?.status !== 'Failed') || !!localPendingUrl;
   const isVerified = !!linkedGithub;
 
@@ -217,9 +197,6 @@ export default function Onboarding() {
                             value={githubUrl}
                             onChange={(e) => {
                               setGithubUrl(e.target.value);
-                              if (isFailed) {
-                                setVerificationFailed(false);
-                              }
                             }}
                             placeholder="https://github.com/username"
                             required

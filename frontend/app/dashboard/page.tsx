@@ -28,29 +28,22 @@ export default function Dashboard() {
   const [showSuccessScreen, setShowSuccessScreen] = useState(false);
   const [showFailedScreen, setShowFailedScreen] = useState(false);
   
-  // Track previous pending state to detect transitions
+  // Track previous pending state to detect success transitions
   const prevPendingRef = useRef(pendingVerification);
   
   useEffect(() => {
-    if (!isCheckingPending && !isCheckingGithub) {
+    if (!isCheckingPending) {
       const wasPending = !!prevPendingRef.current;
       const isPendingNow = !!pendingVerification;
-      const isLinkedNow = !!linkedGithub;
       
-      // Transition from pending to NOT pending
-      if (wasPending && !isPendingNow) {
-        if (isLinkedNow) {
-          setShowSuccessScreen(true);
-          setShowFailedScreen(false);
-        } else {
-          setShowFailedScreen(true);
-          setShowSuccessScreen(false);
-        }
+      // If pending verification disappeared completely (was deleted from Supabase), it means Genlayer returned success!
+      if (wasPending && !isPendingNow && prevPendingRef.current?.status !== 'Failed') {
+        setShowSuccessScreen(true);
       }
       
       prevPendingRef.current = pendingVerification;
     }
-  }, [pendingVerification, linkedGithub, isCheckingPending, isCheckingGithub]);
+  }, [pendingVerification, isCheckingPending]);
 
   useEffect(() => {
     if (!walletLoading && !isConnected) {
