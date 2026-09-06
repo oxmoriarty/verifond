@@ -13,7 +13,7 @@ export interface Project {
   details: string;
   url: string;
   amount_requested: number;
-  status: "Pending" | "Approved" | "Rejected";
+  status: "Pending" | "Approved" | "Rejected" | "Failed";
   reason: string;
   score: number;
   withdrawn: boolean;
