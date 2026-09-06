@@ -144,7 +144,9 @@ export function usePendingProjects() {
               });
               
               if (receipt) {
-                if (receipt.status === 'reverted') {
+                // GenLayer can return status in lowercase or uppercase depending on viem version/custom RPC
+                const status = (receipt.status || '').toString().toLowerCase();
+                if (status === 'reverted' || status === 'error' || status === '0x0') {
                   // Update to failed
                   await fetch(`/api/pending-projects`, {
                     method: 'PATCH',
@@ -482,7 +484,8 @@ export function usePendingVerification() {
               });
               
               if (receipt) {
-                if (receipt.status === 'reverted') {
+                const status = (receipt.status || '').toString().toLowerCase();
+                if (status === 'reverted' || status === 'error' || status === '0x0') {
                   // Transaction failed on-chain. Update Supabase so the UI permanently knows it failed.
                   await fetch(`/api/pending-verifications`, {
                     method: 'PATCH',
