@@ -121,11 +121,11 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ id: s
                   {isClaiming ? <Loader2 className="w-5 h-5 animate-spin" /> : <DollarSign className="w-5 h-5" />}
                   {project.withdrawn ? `${project.allocated_funds} GEN Claimed` : `Claim ${project.allocated_funds} GEN`}
                 </button>
-                {!project.withdrawn && (
-                  <p className="text-xs text-white/40 mt-3 text-center md:text-right w-full">
-                    Max 5% of treasury limit applies.
-                  </p>
-                )}
+                  {!project.withdrawn && (
+                    <p className="text-xs text-white/40 mt-3 text-center md:text-right w-full">
+                      Ensure the treasury has sufficient funds before claiming.
+                    </p>
+                  )}
               </div>
             )}
           </div>

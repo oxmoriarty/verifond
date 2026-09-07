@@ -349,7 +349,7 @@ export default function Dashboard() {
                 <div className="bg-white/5 border border-yellow-500/20 rounded-2xl p-6 flex gap-4">
                   <ShieldAlert className="w-6 h-6 text-yellow-500 flex-shrink-0" />
                   <p className="text-white/70 text-sm leading-relaxed">
-                    <strong>Treasury Rules:</strong> Verifond ensures fair distribution. No single project can claim more than 5% of the total treasury balance. By donating, you are funding the decentralization of the web autonomously through GenLayer AI consensus.
+                    <strong>Treasury Rules:</strong> Verifond ensures fair distribution. By donating, you are funding public goods.
                   </p>
                 </div>
               </div>
