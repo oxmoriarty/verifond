@@ -536,7 +536,7 @@ export function useVerifyGithub() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (profileUrl: string) => {
+    mutationFn: async ({ profileUrl, isUpdate = false }: { profileUrl: string, isUpdate?: boolean }) => {
       if (!address) throw new Error("Wallet not connected.");
       if (!CONTRACT_ADDRESS) throw new Error("Contract address is not configured.");
       
@@ -544,7 +544,7 @@ export function useVerifyGithub() {
       
       const txHash = await client.writeContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
-        functionName: "verify_and_link_github",
+        functionName: isUpdate ? "update_github_link" : "verify_and_link_github",
         args: [profileUrl],
         value: BigInt(0),
       });

@@ -292,22 +292,22 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-bold text-white">Global Submissions</h2>
                   <span className="bg-white/10 px-3 py-1 rounded-full text-sm font-medium">
-                    {allProjects.length} Projects
+                    {onChainProjects.length} Projects
                   </span>
                 </div>
                 
-                {(projectsLoading || pendingLoading) ? (
+                {projectsLoading ? (
                    <div className="h-64 flex items-center justify-center border border-white/10 rounded-2xl">
                      <Loader2 className="w-6 h-6 animate-spin text-white/40" />
                    </div>
-                ) : allProjects.length === 0 ? (
+                ) : onChainProjects.length === 0 ? (
                   <div className="h-64 flex flex-col items-center justify-center border border-white/10 rounded-2xl bg-white/5">
                     <Globe className="w-12 h-12 text-white/20 mb-4" />
-                    <p className="text-white/50">No projects have been submitted yet.</p>
+                    <p className="text-white/60">No verified projects have been evaluated yet.</p>
                   </div>
                 ) : (
                   <div className="grid gap-4">
-                    {allProjects.map((p, i) => <ProjectCard key={p.txHash || p.id || i} project={p} />)}
+                    {onChainProjects.map((p, i) => <ProjectCard key={p.txHash || p.id || i} project={p} />)}
                   </div>
                 )}
               </div>

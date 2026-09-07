@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useSubmitProject } from "@/lib/hooks/useRPGF";
-import { Link, AlignLeft, Send, Loader2, Coins, Type } from "lucide-react";
+import { useSubmitProject, useCheckLinkedGithub } from "@/lib/hooks/useRPGF";
+import { Link as LinkIcon, AlignLeft, Send, Loader2, Coins, Type } from "lucide-react";
+import Link from "next/link";
 
 export function ProjectForm() {
   const [name, setName] = useState("");
@@ -10,6 +11,7 @@ export function ProjectForm() {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const { submitProject, isSubmitting, error } = useSubmitProject();
+  const { data: linkedGithub } = useCheckLinkedGithub();
 
   const isValidUrl = (string: string) => {
     try {
@@ -21,7 +23,8 @@ export function ProjectForm() {
   };
 
   const isAmountValid = !isNaN(Number(amount)) && Number(amount) > 0 && Number(amount) <= 100;
-  const isFormValid = name.trim() !== "" && url.trim() !== "" && description.trim() !== "" && amount.trim() !== "" && isValidUrl(url) && isAmountValid;
+  const isGithubUrlMatch = url.trim() === "" || (linkedGithub ? url.toLowerCase().includes(linkedGithub.toLowerCase()) : true);
+  const isFormValid = name.trim() !== "" && url.trim() !== "" && description.trim() !== "" && amount.trim() !== "" && isValidUrl(url) && isAmountValid && isGithubUrlMatch;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,7 +63,7 @@ export function ProjectForm() {
 
       <div className="space-y-2">
         <label className="text-xs font-medium text-white/60 flex items-center gap-2">
-          <Link className="w-3.5 h-3.5" />
+          <LinkIcon className="w-3.5 h-3.5" />
           Project URL
         </label>
         <input
@@ -72,6 +75,16 @@ export function ProjectForm() {
           disabled={isSubmitting}
           required
         />
+        {url && linkedGithub && !url.toLowerCase().includes(linkedGithub.toLowerCase()) && (
+          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm mt-2 leading-relaxed">
+            This repository does not match your linked GitHub username (@{linkedGithub}). If you have changed your username, you must update your linked profile first.
+            <div className="mt-3">
+              <Link href="/onboarding?update=true" className="inline-block px-4 py-1.5 bg-red-500/20 rounded-lg hover:bg-red-500/30 transition-colors font-semibold">
+                Update Linked GitHub
+              </Link>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useWallet } from "@/lib/genlayer/wallet";
 import { useCheckLinkedGithub, useVerifyGithub, usePendingVerification } from "@/lib/hooks/useRPGF";
@@ -11,6 +11,8 @@ import { Loader2, Github, Copy, Check, ArrowRight, CheckCircle2, AlertTriangle }
 export default function Onboarding() {
   const { isConnected, address, isLoading: walletLoading } = useWallet();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isUpdateMode = searchParams.get("update") === "true";
   
   const { data: linkedGithub, isLoading: isCheckingGithub } = useCheckLinkedGithub();
   const { data: pendingVerification, isLoading: isCheckingPending } = usePendingVerification();
@@ -29,7 +31,7 @@ export default function Onboarding() {
   const handleVerify = (e: React.FormEvent) => {
     e.preventDefault();
     if (!githubUrl) return;
-    verifyGithub(githubUrl, {
+    verifyGithub({ profileUrl: githubUrl, isUpdate: isUpdateMode }, {
       onSuccess: () => {
         setLocalPendingUrl(githubUrl);
       }
@@ -54,7 +56,7 @@ export default function Onboarding() {
   // Pending card shows ONLY after wallet approval (when pendingVerification exists on-chain or locally approved)
   const isFailed = pendingVerification?.status === 'Failed';
   const isPending = (!!pendingVerification && pendingVerification?.status !== 'Failed') || !!localPendingUrl;
-  const isVerified = !!linkedGithub;
+  const isVerified = !!linkedGithub && !isUpdateMode;
 
   return (
     <main className="min-h-screen bg-[#050505] text-white selection:bg-white/30 font-sans pb-24 relative overflow-hidden">
