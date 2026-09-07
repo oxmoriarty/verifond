@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useWallet } from "@/lib/genlayer/wallet";
@@ -8,7 +8,7 @@ import { useCheckLinkedGithub, useVerifyGithub, usePendingVerification } from "@
 import { Navbar } from "@/components/Navbar";
 import { Loader2, Github, Copy, Check, ArrowRight, CheckCircle2, AlertTriangle } from "lucide-react";
 
-export default function Onboarding() {
+function OnboardingContent() {
   const { isConnected, address, isLoading: walletLoading } = useWallet();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -254,3 +254,15 @@ export default function Onboarding() {
   );
 }
 
+
+export default function Onboarding() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-white/40" />
+      </div>
+    }>
+      <OnboardingContent />
+    </Suspense>
+  );
+}
