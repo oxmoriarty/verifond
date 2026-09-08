@@ -154,9 +154,12 @@ export function usePendingProjects() {
                     body: JSON.stringify({ txHash: hash, status: 'Failed' })
                   }).catch(console.error);
                   activeProjects.push({ ...project, status: 'Failed', reason: 'Project submission failed or was rejected.' });
-                } else {
+                } else if (status === 'finalized' || status === 'success' || status === '1' || status === '0x1') {
                   // Success, delete from pending queue
                   await fetch(`/api/pending-projects?txHash=${hash}`, { method: 'DELETE' }).catch(console.error);
+                } else {
+                  // Still pending (e.g. ACCEPTED but not FINALIZED), keep it
+                  activeProjects.push(project);
                 }
                 continue;
               }
@@ -336,7 +339,7 @@ export function useDonate() {
       // Simple optimistic wait for local UI
       await client.waitForTransactionReceipt({
         hash: txHash,
-        status: "ACCEPTED" as any,
+        status: "FINALIZED" as any,
         retries: 24,
         interval: 5000,
       });
@@ -400,7 +403,7 @@ export function useClaimFunds() {
 
       const receipt: any = await client.waitForTransactionReceipt({
         hash: txHash,
-        status: "ACCEPTED" as any,
+        status: "FINALIZED" as any,
         retries: 24,
         interval: 5000,
       });
@@ -493,10 +496,12 @@ export function usePendingVerification() {
                     body: JSON.stringify({ wallet_address: address.toLowerCase(), status: 'Failed' })
                   }).catch(console.error);
                   return { ...pendingData, status: 'Failed' };
-                } else {
+                } else if (status === 'finalized' || status === 'success' || status === '1' || status === '0x1') {
                   // Transaction succeeded. Safe to delete.
                   await fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`, { method: 'DELETE' }).catch(console.error);
                   return null;
+                } else {
+                  return pendingData;
                 }
               }
             } catch (e: any) {
