@@ -23,13 +23,27 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ id: s
     if (projectsLoading || pendingLoading) return;
     
     // De-duplicate projects logic matching Dashboard
-    const finalizedUrls = new Set(onChainProjects.map(p => p.url));
-    const activePendingProjects = pendingProjects.filter(p => !finalizedUrls.has(p.url));
+    const normalizeUrl = (u: string) => (u || "").trim().toLowerCase().replace(/\/$/, "");
+    const finalizedUrls = new Set(onChainProjects.map(p => normalizeUrl(p.url)));
+    const nonFinalizedPending = pendingProjects.filter(p => !finalizedUrls.has(normalizeUrl(p.url)));
+
+    const pendingByUrl = new Map<string, Project>();
+    for (const p of nonFinalizedPending) {
+      const key = normalizeUrl(p.url);
+      const existing = pendingByUrl.get(key);
+      if (!existing || (p.status === "Pending" && existing.status === "Failed")) {
+        pendingByUrl.set(key, p);
+      }
+    }
+
+    const activePendingProjects = Array.from(pendingByUrl.values());
     const allProjects = [...activePendingProjects, ...onChainProjects];
     
-    // Find project by ID or TxHash
+    // Find project by ID, TxHash, or URL fallback
     const foundProject = allProjects.find(
       p => p.id?.toString() === identifier || p.txHash === identifier
+    ) || allProjects.find(
+      p => normalizeUrl(p.url) === normalizeUrl(identifier)
     );
     
     setProject(foundProject || null);

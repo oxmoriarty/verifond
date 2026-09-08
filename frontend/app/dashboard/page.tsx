@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { ProjectForm } from "@/components/ProjectForm";
 import { ProjectCard } from "@/components/ProjectCard";
-import { useProjects, usePendingProjects, useTreasury, useDonate, useCheckLinkedGithub, usePendingVerification } from "@/lib/hooks/useRPGF";
+import { useProjects, usePendingProjects, useTreasury, useDonate, useCheckLinkedGithub, usePendingVerification, Project } from "@/lib/hooks/useRPGF";
 import { Loader2, LayoutGrid, Globe, Coins, ShieldAlert, PlusCircle, Check, X, Github, CheckCircle2 } from "lucide-react";
 
 export default function Dashboard() {
@@ -60,9 +60,27 @@ export default function Dashboard() {
     );
   }
 
-  // Merge pending and finalized projects (filtering out pending ones that are already finalized)
-  const finalizedUrls = new Set(onChainProjects.map(p => p.url));
-  const activePendingProjects = pendingProjects.filter(p => !finalizedUrls.has(p.url));
+  // Normalize URLs for reliable matching
+  const normalizeUrl = (u: string) => (u || "").trim().toLowerCase().replace(/\/$/, "");
+
+  // Set of URLs that are already finalized on-chain (Approved/Rejected)
+  const finalizedUrls = new Set(onChainProjects.map(p => normalizeUrl(p.url)));
+
+  // Filter out any pending or failed projects if an on-chain finalized version already exists
+  const nonFinalizedPending = pendingProjects.filter(p => !finalizedUrls.has(normalizeUrl(p.url)));
+
+  // Deduplicate by URL among pending/failed entries (latest/pending takes priority over older failed)
+  const pendingByUrl = new Map<string, Project>();
+  for (const p of nonFinalizedPending) {
+    const key = normalizeUrl(p.url);
+    const existing = pendingByUrl.get(key);
+    // If no existing entry or current is Pending while existing is Failed, use current
+    if (!existing || (p.status === "Pending" && existing.status === "Failed")) {
+      pendingByUrl.set(key, p);
+    }
+  }
+
+  const activePendingProjects = Array.from(pendingByUrl.values());
   const allProjects = [...activePendingProjects, ...onChainProjects].sort((a, b) => (b.id || 0) - (a.id || 0));
   const myProjects = allProjects.filter(p => p.submitter.toLowerCase() === address?.toLowerCase());
 

@@ -23,6 +23,14 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { txHash, submitter, name, details, url, amount_requested } = body;
 
+    // If resubmitting an existing repo URL (or submitting anew), remove any prior pending/failed records for this url
+    if (url) {
+      await supabase
+        .from('pending_projects')
+        .delete()
+        .ilike('url', url.trim());
+    }
+
     const { data, error } = await supabase
       .from('pending_projects')
       .insert([

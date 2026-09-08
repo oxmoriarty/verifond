@@ -289,7 +289,10 @@ export function useSubmitProject() {
           reason: 'Waiting for GenLayer AI Evaluation...',
           withdrawn: false
         };
-        return old ? [newProject, ...old] : [newProject];
+        const targetUrl = (variables.url || "").trim().toLowerCase();
+        // Remove any prior failed or pending entry for this url so it immediately moves to Pending
+        const filteredOld = Array.isArray(old) ? old.filter((p: any) => (p.url || "").trim().toLowerCase() !== targetUrl) : [];
+        return [newProject, ...filteredOld];
       });
 
       queryClient.invalidateQueries({ queryKey: ["projects", "pending"] });
