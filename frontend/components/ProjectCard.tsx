@@ -1,10 +1,14 @@
 "use client";
 
-import { Project } from "@/lib/hooks/useRPGF";
-import { ExternalLink, ArrowRight } from "lucide-react";
+import { Project, useSubmitProject } from "@/lib/hooks/useRPGF";
+import { useWallet } from "@/lib/genlayer/wallet";
+import { ExternalLink, ArrowRight, RotateCcw, Loader2 } from "lucide-react";
 import Link from "next/link";
 
 export function ProjectCard({ project }: { project: Project }) {
+  const { address } = useWallet();
+  const { submitProject, isSubmitting } = useSubmitProject();
+
   // Status styling
   let statusColor = "bg-white/10 text-white/60 border-white/10";
   if (project.status === "Approved") statusColor = "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
@@ -13,6 +17,21 @@ export function ProjectCard({ project }: { project: Project }) {
   if (project.status === "Failed") statusColor = "bg-red-500/10 text-red-500 border-red-500/20";
 
   const identifier = project.id || project.txHash;
+  const isMyProject = !project.submitter || (address && project.submitter.toLowerCase() === address.toLowerCase());
+  const isFailed = project.status === "Failed";
+
+  const handleResubmit = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!project.name || !project.url || isSubmitting) return;
+
+    submitProject({
+      name: project.name,
+      details: project.details || "Resubmitted project",
+      url: project.url,
+      amountRequested: Number(project.amount_requested) || 1,
+    });
+  };
 
   return (
     <div className="bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/50 p-6 rounded-2xl transition-all duration-200 ease-out hover:bg-white/10 hover:-translate-y-1 hover:border-white/20 group">
@@ -48,15 +67,31 @@ export function ProjectCard({ project }: { project: Project }) {
           </a>
         </div>
 
-        {/* View Details Button */}
-        <div className="flex flex-col items-end">
-           <Link
-             href={`/project/${identifier}`}
-             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all bg-white/10 text-white hover:bg-white hover:text-black hover:scale-105"
-           >
-             View Details
-             <ArrowRight className="w-4 h-4" />
-           </Link>
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center justify-end gap-2.5">
+          {isFailed && isMyProject && (
+            <button
+              onClick={handleResubmit}
+              disabled={isSubmitting}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25 hover:border-red-500/50 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(239,68,68,0.15)]"
+              title="Resubmit project with existing details"
+            >
+              {isSubmitting ? (
+                <Loader2 className="w-4 h-4 animate-spin text-red-400" />
+              ) : (
+                <RotateCcw className="w-4 h-4 text-red-400" />
+              )}
+              <span>{isSubmitting ? "Resubmitting..." : "Resubmit"}</span>
+            </button>
+          )}
+
+          <Link
+            href={`/project/${identifier}`}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all bg-white/10 text-white hover:bg-white hover:text-black hover:scale-105"
+          >
+            View Details
+            <ArrowRight className="w-4 h-4" />
+          </Link>
         </div>
       </div>
     </div>

@@ -4,8 +4,8 @@ import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { useWallet } from "@/lib/genlayer/wallet";
-import { useProjects, usePendingProjects, useClaimFunds, Project } from "@/lib/hooks/useRPGF";
-import { ExternalLink, ArrowLeft, ShieldCheck, CheckCircle2, Loader2, DollarSign, AlertCircle } from "lucide-react";
+import { useProjects, usePendingProjects, useClaimFunds, useSubmitProject, Project } from "@/lib/hooks/useRPGF";
+import { ExternalLink, ArrowLeft, ShieldCheck, CheckCircle2, Loader2, DollarSign, AlertCircle, RotateCcw } from "lucide-react";
 
 export default function ProjectDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -15,6 +15,7 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ id: s
   const { data: onChainProjects = [], isLoading: projectsLoading } = useProjects();
   const { data: pendingProjects = [], isLoading: pendingLoading } = usePendingProjects();
   const { mutate: claimFunds, isPending: isClaiming } = useClaimFunds();
+  const { submitProject, isSubmitting } = useSubmitProject();
   
   const [project, setProject] = useState<Project | null>(null);
 
@@ -55,12 +56,31 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ id: s
     );
   }
 
-  const isMyProject = address && project.submitter.toLowerCase() === address.toLowerCase();
+  const isMyProject = !project.submitter || (address && project.submitter.toLowerCase() === address.toLowerCase());
 
   let statusColor = "bg-white/10 text-white/60 border-white/10";
   if (project.status === "Approved") statusColor = "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
   if (project.status === "Rejected") statusColor = "bg-red-500/20 text-red-400 border-red-500/30";
   if (project.status === "Pending") statusColor = "bg-blue-500/20 text-blue-400 border-blue-500/30";
+  if (project.status === "Failed") statusColor = "bg-red-500/10 text-red-500 border-red-500/20";
+
+  const handleResubmit = () => {
+    if (!project.name || !project.url || isSubmitting) return;
+
+    submitProject(
+      {
+        name: project.name,
+        details: project.details || "Resubmitted project",
+        url: project.url,
+        amountRequested: Number(project.amount_requested) || 1,
+      },
+      {
+        onSuccess: () => {
+          router.push("/dashboard");
+        },
+      }
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[#050505] relative selection:bg-white/20 selection:text-white">
@@ -106,7 +126,7 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ id: s
               </a>
             </div>
 
-            {/* Claim Funds Button */}
+            {/* Claim Funds Button for Approved Projects */}
             {isMyProject && project.status === "Approved" && (
               <div className="flex flex-col items-start md:items-end w-full md:w-auto mt-4 md:mt-0">
                 <button
@@ -126,6 +146,23 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ id: s
                       Ensure the treasury has sufficient funds before claiming.
                     </p>
                   )}
+              </div>
+            )}
+
+            {/* Resubmit Button for Failed Projects */}
+            {isMyProject && project.status === "Failed" && (
+              <div className="flex flex-col items-start md:items-end w-full md:w-auto mt-4 md:mt-0">
+                <button
+                  onClick={handleResubmit}
+                  disabled={isSubmitting}
+                  className="flex items-center justify-center gap-2.5 w-full md:w-auto px-8 py-4 rounded-xl text-base md:text-lg font-bold transition-all bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-500/30 hover:border-red-500/60 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_25px_rgba(239,68,68,0.2)]"
+                >
+                  {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin text-red-400" /> : <RotateCcw className="w-5 h-5 text-red-400" />}
+                  <span>{isSubmitting ? "Resubmitting Project..." : "Resubmit Project"}</span>
+                </button>
+                <p className="text-xs text-white/40 mt-2 text-center md:text-right w-full">
+                  Resubmits with the same details and requested amount.
+                </p>
               </div>
             )}
           </div>
@@ -169,6 +206,27 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ id: s
                   <Loader2 className="w-10 h-10 animate-spin text-white/20 mb-4" />
                   <p className="text-white/60">GenLayer AI validators are actively reviewing this project.</p>
                   <p className="text-white/40 text-sm mt-2">Results will appear here once consensus is reached.</p>
+                </div>
+              ) : project.status === "Failed" ? (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-red-400/80 text-sm font-bold uppercase tracking-wider mb-3">Failure Notice</h3>
+                    <p className="text-white/90 leading-relaxed text-base font-mono bg-red-500/10 p-6 rounded-xl border border-red-500/20">
+                      {project.reason || "The transaction failed on-chain or timed out before consensus could be reached. Your project was not evaluated and this does not count against your submission limit."}
+                    </p>
+                  </div>
+                  {isMyProject && (
+                    <div className="pt-2">
+                      <button
+                        onClick={handleResubmit}
+                        disabled={isSubmitting}
+                        className="flex items-center gap-2.5 px-6 py-3 rounded-xl text-sm font-semibold transition-all bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-500/30 hover:border-red-500/60 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(239,68,68,0.2)]"
+                      >
+                        {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin text-red-400" /> : <RotateCcw className="w-4 h-4 text-red-400" />}
+                        <span>{isSubmitting ? "Resubmitting Project..." : "Resubmit This Project"}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-10">
