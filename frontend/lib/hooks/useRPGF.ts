@@ -146,16 +146,37 @@ export function usePendingProjects() {
               if (receipt) {
                 // GenLayer can return status in lowercase or uppercase depending on viem version/custom RPC
                 const status = (receipt.status || '').toString().toLowerCase();
-                if (status === 'reverted' || status === 'error' || status === '0x0') {
-                  // Update to failed
+                const consensusStatus = ((receipt as any).consensusStatus || (receipt as any).consensus_status || '').toString().toLowerCase();
+                const execResult = ((receipt as any).txExecutionResultName || (receipt as any).tx_execution_result_name || '').toString().toLowerCase();
+
+                const isFailedTx = 
+                  status === 'reverted' || 
+                  status === 'error' || 
+                  status === '0x0' ||
+                  status === 'undetermined' ||
+                  status === 'canceled' ||
+                  status.includes('timeout') ||
+                  consensusStatus === 'undetermined' ||
+                  consensusStatus.includes('timeout') ||
+                  execResult.includes('error');
+
+                if (isFailedTx) {
+                  // Transaction failed on GenLayer (consensus failed, timeout, undetermined, or VM execution error)
+                  const failureReason = status === 'undetermined' || consensusStatus === 'undetermined'
+                    ? 'Consensus undetermined by validators. Contract state was not modified.'
+                    : status.includes('timeout') || consensusStatus.includes('timeout')
+                    ? 'Transaction timed out during validator consensus.'
+                    : 'Transaction execution failed or reverted on-chain.';
+
                   await fetch(`/api/pending-projects`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ txHash: hash, status: 'Failed' })
+                    body: JSON.stringify({ txHash: hash, status: 'Failed', reason: failureReason })
                   }).catch(console.error);
-                  activeProjects.push({ ...project, status: 'Failed', reason: 'Project submission failed or was rejected.' });
+
+                  activeProjects.push({ ...project, status: 'Failed', reason: failureReason });
                 } else if (status === 'finalized' || status === 'success' || status === '1' || status === '0x1') {
-                  // Success, delete from pending queue
+                  // Transaction finalized with consensus on-chain (contract state updated with Approved or Rejected)
                   await fetch(`/api/pending-projects?txHash=${hash}`, { method: 'DELETE' }).catch(console.error);
                 } else {
                   // Still pending (e.g. ACCEPTED but not FINALIZED), keep it
@@ -491,7 +512,21 @@ export function usePendingVerification() {
               
               if (receipt) {
                 const status = (receipt.status || '').toString().toLowerCase();
-                if (status === 'reverted' || status === 'error' || status === '0x0') {
+                const consensusStatus = ((receipt as any).consensusStatus || (receipt as any).consensus_status || '').toString().toLowerCase();
+                const execResult = ((receipt as any).txExecutionResultName || (receipt as any).tx_execution_result_name || '').toString().toLowerCase();
+
+                const isFailedTx = 
+                  status === 'reverted' || 
+                  status === 'error' || 
+                  status === '0x0' ||
+                  status === 'undetermined' ||
+                  status === 'canceled' ||
+                  status.includes('timeout') ||
+                  consensusStatus === 'undetermined' ||
+                  consensusStatus.includes('timeout') ||
+                  execResult.includes('error');
+
+                if (isFailedTx) {
                   // Transaction failed on-chain. Update Supabase so the UI permanently knows it failed.
                   await fetch(`/api/pending-verifications`, {
                     method: 'PATCH',
@@ -500,7 +535,7 @@ export function usePendingVerification() {
                   }).catch(console.error);
                   return { ...pendingData, status: 'Failed' };
                 } else if (status === 'finalized' || status === 'success' || status === '1' || status === '0x1') {
-                  // Transaction succeeded. Safe to delete.
+                  // Transaction succeeded and finalized. Safe to delete.
                   await fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`, { method: 'DELETE' }).catch(console.error);
                   return null;
                 } else {
