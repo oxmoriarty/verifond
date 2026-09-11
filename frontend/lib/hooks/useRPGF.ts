@@ -170,14 +170,25 @@ export function usePendingProjects() {
 
                   await fetch(`/api/pending-projects`, {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ txHash: hash, status: 'Failed', reason: failureReason })
+                    headers: { 
+                      'Content-Type': 'application/json',
+                      'x-wallet-address': project.submitter || ''
+                    },
+                    body: JSON.stringify({ 
+                      txHash: hash, 
+                      status: 'Failed', 
+                      reason: failureReason,
+                      caller: project.submitter
+                    })
                   }).catch(console.error);
 
                   activeProjects.push({ ...project, status: 'Failed', reason: failureReason });
                 } else if (status === 'finalized' || status === 'success' || status === '1' || status === '0x1') {
                   // Transaction finalized with consensus on-chain (contract state updated with Approved or Rejected)
-                  await fetch(`/api/pending-projects?txHash=${hash}`, { method: 'DELETE' }).catch(console.error);
+                  await fetch(`/api/pending-projects?txHash=${hash}&wallet=${project.submitter || ''}`, { 
+                    method: 'DELETE',
+                    headers: { 'x-wallet-address': project.submitter || '' }
+                  }).catch(console.error);
                 } else {
                   // Still pending (e.g. ACCEPTED but not FINALIZED), keep it
                   activeProjects.push(project);
@@ -195,8 +206,15 @@ export function usePendingProjects() {
                   console.error("Project pending for >2 minutes. Assuming dropped.");
                   await fetch(`/api/pending-projects`, {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ txHash: hash, status: 'Failed' })
+                    headers: { 
+                      'Content-Type': 'application/json',
+                      'x-wallet-address': project.submitter || ''
+                    },
+                    body: JSON.stringify({ 
+                      txHash: hash, 
+                      status: 'Failed',
+                      caller: project.submitter
+                    })
                   }).catch(console.error);
                   activeProjects.push({ ...project, status: 'Failed', reason: 'Project submission was dropped.' });
                   isDropped = true;
@@ -250,6 +268,39 @@ export function useTreasury() {
   });
 }
 
+export interface TreasuryDetails {
+  totalTreasury: number;
+  totalReserved: number;
+  availableTreasury: number;
+}
+
+export function useTreasuryDetails() {
+  return useQuery<TreasuryDetails, Error>({
+    queryKey: ["treasuryDetails"],
+    queryFn: async () => {
+      if (!CONTRACT_ADDRESS) return { totalTreasury: 0, totalReserved: 0, availableTreasury: 0 };
+      try {
+        const client = await getClient();
+        const detailsStr: any = await client.readContract({
+          address: CONTRACT_ADDRESS as `0x${string}`,
+          functionName: "get_treasury_details",
+          args: [],
+        });
+        const details = typeof detailsStr === 'string' ? JSON.parse(detailsStr) : detailsStr;
+        return {
+          totalTreasury: Number(details?.total_treasury || 0) / 1e18,
+          totalReserved: Number(details?.total_reserved || 0) / 1e18,
+          availableTreasury: Number(details?.available_treasury || 0) / 1e18,
+        };
+      } catch (err) {
+        console.error("Error fetching treasury details:", err);
+        return { totalTreasury: 0, totalReserved: 0, availableTreasury: 0 };
+      }
+    },
+    refetchInterval: 15000,
+  });
+}
+
 // ==========================================
 // 3. Submit Project (Optimistic UI)
 // ==========================================
@@ -275,10 +326,13 @@ export function useSubmitProject() {
         value: BigInt(0),
       });
 
-      // Post to our Supabase API
+      // Post to our Supabase API with wallet authentication proof
       const res = await fetch('/api/pending-projects', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-wallet-address': address
+        },
         body: JSON.stringify({
           txHash,
           submitter: address,
@@ -471,12 +525,47 @@ export function useCheckLinkedGithub() {
         
         // If we found a linked GitHub, delete any stale pending verification from Supabase
         if (username) {
-          fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`, { method: 'DELETE' }).catch(console.error);
+          fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`, { 
+            method: 'DELETE',
+            headers: { 'x-wallet-address': address }
+          }).catch(console.error);
         }
         
         return username;
       } catch (e) {
         console.error("Failed to fetch linked github", e);
+        return null;
+      }
+    },
+    enabled: !!address && !!CONTRACT_ADDRESS,
+  });
+}
+
+export interface LinkedIdentity {
+  linked: boolean;
+  wallet?: string;
+  handle?: string;
+  canonical_url?: string;
+  github_id?: number;
+}
+
+export function useLinkedIdentity() {
+  const { address } = useWallet();
+
+  return useQuery<LinkedIdentity | null, Error>({
+    queryKey: ["linkedIdentity", address?.toLowerCase()],
+    queryFn: async () => {
+      if (!address || !CONTRACT_ADDRESS) return null;
+      try {
+        const client = await getClient();
+        const res: any = await client.readContract({
+          address: CONTRACT_ADDRESS as `0x${string}`,
+          functionName: "get_linked_identity",
+          args: [address],
+        });
+        return typeof res === "string" ? JSON.parse(res) : res;
+      } catch (e) {
+        console.error("Failed to fetch linked identity bundle", e);
         return null;
       }
     },
@@ -530,13 +619,19 @@ export function usePendingVerification() {
                   // Transaction failed on-chain. Update Supabase so the UI permanently knows it failed.
                   await fetch(`/api/pending-verifications`, {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ wallet_address: address.toLowerCase(), status: 'Failed' })
+                    headers: { 
+                      'Content-Type': 'application/json',
+                      'x-wallet-address': address
+                    },
+                    body: JSON.stringify({ wallet_address: address.toLowerCase(), status: 'Failed', txHash: hash })
                   }).catch(console.error);
                   return { ...pendingData, status: 'Failed' };
                 } else if (status === 'finalized' || status === 'success' || status === '1' || status === '0x1') {
                   // Transaction succeeded and finalized. Safe to delete.
-                  await fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`, { method: 'DELETE' }).catch(console.error);
+                  await fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}&txHash=${hash}`, { 
+                    method: 'DELETE',
+                    headers: { 'x-wallet-address': address }
+                  }).catch(console.error);
                   return null;
                 } else {
                   return pendingData;
@@ -554,8 +649,11 @@ export function usePendingVerification() {
                   console.error("Transaction pending for >2 minutes without a receipt. Assuming dropped.");
                   await fetch(`/api/pending-verifications`, {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ wallet_address: address.toLowerCase(), status: 'Failed' })
+                    headers: { 
+                      'Content-Type': 'application/json',
+                      'x-wallet-address': address
+                    },
+                    body: JSON.stringify({ wallet_address: address.toLowerCase(), status: 'Failed', txHash: hash })
                   }).catch(console.error);
                   return { ...pendingData, status: 'Failed' };
                 }
@@ -592,10 +690,13 @@ export function useVerifyGithub() {
         value: BigInt(0),
       });
 
-      // Post pending verification to Supabase backend
+      // Post pending verification to Supabase backend with wallet authentication proof
       const res = await fetch('/api/pending-verifications', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-wallet-address': address
+        },
         body: JSON.stringify({
           txHash,
           wallet_address: address.toLowerCase(),

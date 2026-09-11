@@ -33,17 +33,22 @@ class RPGFContract(gl.Contract):
     projects: TreeMap[u256, ProjectInfo]
     next_project_id: u256
     treasury: u256
+    total_reserved: u256
 
     # State variables for Identity & Deduplication
     linked_githubs: TreeMap[str, str] # Wallet Hex -> Github Username
     linked_wallets: TreeMap[str, str] # Github Username -> Wallet Hex
     linked_github_ids: TreeMap[u256, str] # Numeric Github User ID -> Wallet Hex
+    linked_user_ids: TreeMap[str, u256] # Wallet Hex -> Numeric Github User ID
+    linked_profile_urls: TreeMap[str, str] # Canonical GitHub Profile URL -> Wallet Hex
+    linked_canonical_urls: TreeMap[str, str] # Wallet Hex -> Canonical GitHub Profile URL
     submitted_urls: TreeMap[str, u256] # Github Repo URL -> Number of Attempts (999 means Approved)
     submitted_repo_ids: TreeMap[u256, u256] # Numeric Github Repo ID -> Number of Attempts (999 means Approved)
 
     def __init__(self):
         self.next_project_id = u256(1)
         self.treasury = u256(0)
+        self.total_reserved = u256(0)
 
     @gl.public.write.payable
     def donate(self) -> None:
@@ -142,7 +147,10 @@ class RPGFContract(gl.Contract):
         if user_id == u256(0):
             raise gl.vm.UserError("Verification failed: Could not establish numeric GitHub User ID.")
 
-        # Strict 1-to-1 username enforcement
+        # Form canonical profile URL
+        canonical_url = f"https://github.com/{username}"
+
+        # Strict 1-to-1 username / handle enforcement
         if username in self.linked_wallets and self.linked_wallets[username] != sender:
             raise gl.vm.UserError("This GitHub account is already linked to another wallet.")
 
@@ -150,17 +158,32 @@ class RPGFContract(gl.Contract):
         if user_id in self.linked_github_ids and self.linked_github_ids[user_id] != sender:
             raise gl.vm.UserError("This GitHub user ID is already linked to another wallet.")
 
-        if is_update:
-            # Free up old username
-            old_username = self.linked_githubs[sender]
-            if old_username in self.linked_wallets:
-                del self.linked_wallets[old_username]
+        # Canonical URL deduplication check
+        if canonical_url in self.linked_profile_urls and self.linked_profile_urls[canonical_url] != sender:
+            raise gl.vm.UserError("This canonical GitHub profile URL is already linked to another wallet.")
 
-        # Save mappings
+        if is_update:
+            # Free up old bindings
+            if sender in self.linked_githubs:
+                old_username = self.linked_githubs[sender]
+                if old_username in self.linked_wallets:
+                    del self.linked_wallets[old_username]
+            if sender in self.linked_user_ids:
+                old_uid = self.linked_user_ids[sender]
+                if old_uid in self.linked_github_ids:
+                    del self.linked_github_ids[old_uid]
+            if sender in self.linked_canonical_urls:
+                old_curl = self.linked_canonical_urls[sender]
+                if old_curl in self.linked_profile_urls:
+                    del self.linked_profile_urls[old_curl]
+
+        # Bind wallet proof, canonical GitHub URL, API handle, and immutable GitHub user ID to one account
         self.linked_githubs[sender] = username
         self.linked_wallets[username] = sender
-        if user_id > u256(0):
-            self.linked_github_ids[user_id] = sender
+        self.linked_github_ids[user_id] = sender
+        self.linked_user_ids[sender] = user_id
+        self.linked_profile_urls[canonical_url] = sender
+        self.linked_canonical_urls[sender] = canonical_url
         
         return username
 
@@ -211,23 +234,32 @@ class RPGFContract(gl.Contract):
 
         task = f"""
         Evaluate this project submission for Retroactive Public Goods Funding (RPGF).
-        You must evaluate based on 4 criteria:
-        A. Project Description & Corroboration (25%): Verify project details against actual code/content.
-        B. Resource Quality (30%): Verify code functionality, commit activity, and deliverables. Reject fake or empty repos.
-        C. Public Goods Impact (25%): Must provide public value (open source, education, infra).
-        D. Feasibility & Execution (20%): Real work evidence.
+        You are provided with 5 verified sources of repository evidence:
+        1. Repository Metadata & Fork Data (API: /repos/{repo_owner}/{repo_name})
+        2. Pinned Repository Tree Structure (API: /repos/{repo_owner}/{repo_name}/contents)
+        3. Commit History (API: /repos/{repo_owner}/{repo_name}/commits)
+        4. Contributor Records (API: /repos/{repo_owner}/{repo_name}/contributors)
+        5. Public Webpage Content ({url})
+
+        Evaluation Criteria (Weighted 100%):
+        A. Repository Tree & Architecture (25%): Verify pinned directory tree structure, actual source code files, architecture, and functional deliverables. Reject empty, skeleton, or placeholder repositories.
+        B. Commit History & Work Authenticity (25%): Verify commit history, timestamps, and sustained development progression. Reject repositories with only a single synthetic commit or bulk copy-paste dump.
+        C. Contributor & Provenance Verification (25%): Verify that the submitter ({user_handle}) is an active contributor with meaningful commits. Inspect fork data: if 'fork' is true, verify substantial original modifications and novel value beyond upstream parent; reject unmodified or trivial forks.
+        D. Public Goods Impact & Feasibility (25%): Assess whether the project provides genuine public value (open-source utility, tooling, educational, or ecosystem infrastructure).
 
         Special Evaluation Rules:
-        1. Code-First Rule: If the submitted description is brief or simple, BUT the repository code demonstrates a solid functional public good, DO NOT reject for description length. Prioritize actual codebase quality.
-        2. Mismatch Rule: If the submitted description completely mismatches the actual repository code (e.g. claims Twitter app, but repo is a calculator), set status 'Rejected', score <= 4, and allocation 0.
-        3. Anti-Copycat Rule: Inspect repository creation date, commit volume, and fork markers. Reject low-effort cloned repositories lacking original contributions.
-        4. Bounded Allocation: The submitter requested {requested_gen} GEN. Max allowed request is 100 GEN. If 'Approved', allocate between 1 and {requested_gen} GEN based on quality. If 'Rejected', allocation MUST be 0.
+        1. Fork & Clone Rule: If the repository is a fork or low-effort clone lacking substantial original work by {user_handle}, set status 'Rejected', score <= 3, and suggested_allocation = 0.
+        2. Tree & File Check: If the repository tree contains only placeholder files (e.g., only README.md or license without real functional code), set status 'Rejected', score <= 2, and suggested_allocation = 0.
+        3. Commit History Check: If commit history does not demonstrate authentic work by the submitter or shows anomalous history, penalize heavily or Reject.
+        4. Code-First Rule: If the submitted description is brief or simple, BUT the repository code demonstrates a solid functional public good, DO NOT reject for description length. Prioritize actual codebase quality.
+        5. Mismatch Rule: If the submitted description completely mismatches the actual repository code (e.g. claims Twitter app, but repo is a calculator), set status 'Rejected', score <= 4, and suggested_allocation = 0.
+        6. Bounded Allocation: The submitter requested {requested_gen} GEN. Max allowed request is 100 GEN. If 'Approved', allocate between 1 and {requested_gen} GEN based on quality and impact. If 'Rejected', suggested_allocation MUST be 0.
 
         Return JSON format:
         {{
           "score": integer (1-10),
           "status": "Approved" or "Rejected",
-          "reason": "string explaining evaluation",
+          "reason": "detailed string explaining evaluation citing tree structure, commit history, contributor records, and fork status",
           "suggested_allocation": integer (0 to {requested_gen}),
           "repo_id": integer (numeric GitHub repository ID from metadata, or 0),
           "repo_owner_id": integer (numeric GitHub user ID of the repository owner from API data, or 0),
@@ -239,11 +271,11 @@ class RPGFContract(gl.Contract):
         criteria = f"""
         Must return a valid JSON object.
         Validation Rules:
-        1. 'status' MUST be 'Approved' only if web content confirms an active public goods project with real code/deliverables.
-        2. 'status' MUST be 'Rejected' if repo is inaccessible, empty, placeholder, low-effort clone, or completely mismatches description.
+        1. 'status' MUST be 'Approved' only if the repository tree contains substantive source code, commit history proves sustained effort, contributors include the author, and fork data shows original work.
+        2. 'status' MUST be 'Rejected' if repo is inaccessible, empty tree, single-commit clone, low-effort fork, or completely mismatches description.
         3. If 'status' is 'Rejected', 'suggested_allocation' MUST be 0.
         4. If 'status' is 'Approved', 'suggested_allocation' MUST be between 1 and min({requested_gen}, 100) GEN.
-        5. 'reason' MUST cite verified evidence from the fetched content.
+        5. 'reason' MUST cite specific evidence from repository tree, commit history, contributors, and fork status.
         """
         
         def fetch_data():
@@ -253,11 +285,36 @@ class RPGFContract(gl.Contract):
                 content = "Failed to fetch website content: The URL provided may be invalid or unreachable."
                 
             try:
-                api_content = gl.nondet.web.render(f"https://api.github.com/repos/{repo_owner}/{repo_name}", mode='text')
+                api_repo = gl.nondet.web.render(f"https://api.github.com/repos/{repo_owner}/{repo_name}", mode='text')
             except Exception:
-                api_content = "Failed to fetch GitHub API data."
+                api_repo = "Failed to fetch GitHub API repository metadata."
+
+            try:
+                api_tree = gl.nondet.web.render(f"https://api.github.com/repos/{repo_owner}/{repo_name}/contents", mode='text')
+            except Exception:
+                api_tree = "Failed to fetch GitHub repository tree contents."
+
+            try:
+                api_commits = gl.nondet.web.render(f"https://api.github.com/repos/{repo_owner}/{repo_name}/commits?per_page=10", mode='text')
+            except Exception:
+                api_commits = "Failed to fetch GitHub commit history."
+
+            try:
+                api_contributors = gl.nondet.web.render(f"https://api.github.com/repos/{repo_owner}/{repo_name}/contributors?per_page=10", mode='text')
+            except Exception:
+                api_contributors = "Failed to fetch GitHub contributors."
                 
-            return f"Project Name: {name}\nDetails: {details}\nSubmitter GitHub Handle: {user_handle}\nRequested Amount: {requested_gen} GEN\n\nGitHub API Repo Data:\n{api_content}\n\nWebsite Content:\n{content}"
+            return (
+                f"Project Name: {name}\n"
+                f"Details: {details}\n"
+                f"Submitter GitHub Handle: {user_handle}\n"
+                f"Requested Amount: {requested_gen} GEN\n\n"
+                f"--- GitHub API Repo & Fork Data ---\n{api_repo}\n\n"
+                f"--- Repository Pinned Tree Contents ---\n{api_tree}\n\n"
+                f"--- Repository Commit History ---\n{api_commits}\n\n"
+                f"--- Repository Contributors ---\n{api_contributors}\n\n"
+                f"--- Public Webpage Content ---\n{content}"
+            )
 
         result = gl.eq_principle.prompt_non_comparative(
             fetch_data,
@@ -323,6 +380,10 @@ class RPGFContract(gl.Contract):
             if attempts_by_id >= 3:
                 raise gl.vm.UserError("This project repository ID has been rejected 3 times and is permanently locked from future submissions.")
 
+        # Available unreserved treasury calculation
+        available_treasury = self.treasury - self.total_reserved if self.treasury >= self.total_reserved else u256(0)
+        available_gen = int(available_treasury // (u256(10) ** u256(18)))
+
         if not isinstance(score_int, int):
             score_int = 1
         score_int = max(1, min(10, score_int))
@@ -333,9 +394,14 @@ class RPGFContract(gl.Contract):
         if status != "Approved":
             allocated_gen = 0
             
-        # Deterministic Python capping at min(allocated_gen, requested_gen, 100)
-        allocated_gen = max(0, min(allocated_gen, requested_gen, 100))
+        # Deterministic Python capping at min(allocated_gen, requested_gen, 100, available_gen)
+        # Reserve approved allocations against unreserved treasury funds
+        allocated_gen = max(0, min(allocated_gen, requested_gen, 100, available_gen))
         allocated_wei = u256(allocated_gen) * (u256(10) ** u256(18))
+
+        # Reserve allocated funds against treasury immediately upon approval
+        if status == "Approved" and allocated_wei > u256(0):
+            self.total_reserved += allocated_wei
 
         # Record URL attempt state
         if status == "Approved":
@@ -397,12 +463,17 @@ class RPGFContract(gl.Contract):
             
         if p.allocated_funds > self.treasury:
             raise gl.vm.UserError("Insufficient funds in the treasury. Please try again later.")
+
+        if p.allocated_funds > self.total_reserved:
+            raise gl.vm.UserError("Reserved allocation mismatch in treasury.")
             
         final_payout = p.allocated_funds
             
         p.withdrawn = True
         self.projects[project_id] = p
         
+        # Deduct from both total_reserved and treasury
+        self.total_reserved -= final_payout
         self.treasury -= final_payout
         
         _Recipient(p.submitter).emit_transfer(value=final_payout)
@@ -412,11 +483,47 @@ class RPGFContract(gl.Contract):
         return self.treasury
 
     @gl.public.view
+    def get_reserved_funds(self) -> u256:
+        return self.total_reserved
+
+    @gl.public.view
+    def get_available_treasury(self) -> u256:
+        if self.treasury >= self.total_reserved:
+            return self.treasury - self.total_reserved
+        return u256(0)
+
+    @gl.public.view
+    def get_treasury_details(self) -> str:
+        avail = self.treasury - self.total_reserved if self.treasury >= self.total_reserved else u256(0)
+        return json.dumps({
+            "total_treasury": int(self.treasury),
+            "total_reserved": int(self.total_reserved),
+            "available_treasury": int(avail)
+        })
+
+    @gl.public.view
     def get_linked_github(self, wallet_address: str) -> str:
         wallet_address = wallet_address.lower()
         if wallet_address in self.linked_githubs:
             return self.linked_githubs[wallet_address]
         return ""
+
+    @gl.public.view
+    def get_linked_identity(self, wallet_address: str) -> str:
+        """Returns the complete bound identity bundle for a wallet address."""
+        wallet_address = wallet_address.lower()
+        if wallet_address not in self.linked_githubs:
+            return json.dumps({"linked": False})
+        handle = self.linked_githubs[wallet_address]
+        user_id = int(self.linked_user_ids[wallet_address]) if wallet_address in self.linked_user_ids else 0
+        canonical_url = self.linked_canonical_urls[wallet_address] if wallet_address in self.linked_canonical_urls else f"https://github.com/{handle}"
+        return json.dumps({
+            "linked": True,
+            "wallet": wallet_address,
+            "handle": handle,
+            "canonical_url": canonical_url,
+            "github_id": user_id
+        })
 
     @gl.public.view
     def get_project(self, project_id: u256) -> str:
@@ -486,10 +593,3 @@ class RPGFContract(gl.Contract):
                 "weaknesses": w_list
             })
         return json.dumps(all_projs)
-
-@gl.evm.contract_interface
-class _Recipient:
-    class View:
-        pass
-    class Write:
-        pass
