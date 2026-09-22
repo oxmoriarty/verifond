@@ -149,7 +149,7 @@ export function AccountPanel() {
             <Alert className="bg-yellow-500/10 border-yellow-500/20 text-yellow-500">
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>Network Warning</AlertTitle>
-              <AlertDescription>You are not on the GenLayer testnet. Please switch networks to interact with Verifund.</AlertDescription>
+              <AlertDescription>You are not on the GenLayer Studio Network. Please switch networks to interact with Verifund.</AlertDescription>
             </Alert>
           )}
 

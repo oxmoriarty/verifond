@@ -43,7 +43,7 @@ function getFriendlyErrorMessage(err: any, defaultMsg: string): string {
     return "The network is currently busy. Please wait a few seconds and try again.";
   }
   if (msg.includes("Insufficient funds") || msg.includes("insufficient funds")) {
-    return "Insufficient GEN testnet funds to complete this transaction.";
+    return "Insufficient GEN funds. Make sure your Studionet wallet has GEN (use the 💧 faucet in GenLayer Studio).";
   }
   if (msg.includes("execution reverted") || msg.includes("revert")) {
     // Try to extract the custom UserError message if present
@@ -202,8 +202,8 @@ export function usePendingProjects() {
               if (project.created_at) {
                 const createdTime = new Date(project.created_at).getTime();
                 const ageInMinutes = (Date.now() - createdTime) / 1000 / 60;
-                if (ageInMinutes > 2) {
-                  console.error("Project pending for >2 minutes. Assuming dropped.");
+                if (ageInMinutes > 15) {
+                  console.error("Project pending for >15 minutes. Assuming dropped.");
                   await fetch(`/api/pending-projects`, {
                     method: 'PATCH',
                     headers: { 
@@ -638,15 +638,14 @@ export function usePendingVerification() {
                 }
               }
             } catch (e: any) {
-              // If we get an error (like TransactionReceiptNotFoundError), it might still be pending.
-              // However, if it has been pending for more than 2 minutes, GenLayer likely dropped the transaction.
-              // We should auto-update it to Failed so the user's UI doesn't get permanently stuck.
+              // However, if it has been pending for more than 15 minutes without a receipt,
+              // Studionet likely dropped the transaction. Mark it Failed so the UI unblocks.
               if (pendingData.created_at) {
                 const createdTime = new Date(pendingData.created_at).getTime();
                 const ageInMinutes = (Date.now() - createdTime) / 1000 / 60;
                 
-                if (ageInMinutes > 2) {
-                  console.error("Transaction pending for >2 minutes without a receipt. Assuming dropped.");
+                if (ageInMinutes > 15) {
+                  console.error("Transaction pending for >15 minutes without a receipt. Assuming dropped.");
                   await fetch(`/api/pending-verifications`, {
                     method: 'PATCH',
                     headers: { 
@@ -715,7 +714,7 @@ export function useVerifyGithub() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pendingVerification", address?.toLowerCase()] });
       queryClient.invalidateQueries({ queryKey: ["linkedGithub", address?.toLowerCase()] });
-      success("Verification Submitted!", { description: "Your transaction is submitted. GenLayer AI verification takes about 20 minutes to finalize on Testnet." });
+      success("Verification Submitted!", { description: "Your transaction is submitted. GenLayer AI validators are now verifying your GitHub profile. This typically takes a few minutes on Studionet." });
     },
     onError: (err: any) => {
       console.error("[useVerifyGithub] Raw error:", err);

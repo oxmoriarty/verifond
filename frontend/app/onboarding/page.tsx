@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useWallet } from "@/lib/genlayer/wallet";
-import { useCheckLinkedGithub, useVerifyGithub, usePendingVerification } from "@/lib/hooks/useRPGF";
+import { useCheckLinkedGithub, useLinkedIdentity, useVerifyGithub, usePendingVerification } from "@/lib/hooks/useRPGF";
 import { Navbar } from "@/components/Navbar";
 import { Loader2, Github, Copy, Check, ArrowRight, CheckCircle2, AlertTriangle } from "lucide-react";
 
@@ -15,6 +15,7 @@ function OnboardingContent() {
   const isUpdateMode = searchParams.get("update") === "true";
   
   const { data: linkedGithub, isLoading: isCheckingGithub } = useCheckLinkedGithub();
+  const { data: linkedIdentity } = useLinkedIdentity();
   const { data: pendingVerification, isLoading: isCheckingPending } = usePendingVerification();
   const { mutate: verifyGithub, isPending: isVerifying } = useVerifyGithub();
 
@@ -96,23 +97,45 @@ function OnboardingContent() {
           {/* STATE 1: VERIFIED SUCCESS CARD */}
           {isVerified ? (
             <div className="bg-green-500/10 border border-green-500/20 rounded-2xl p-8 text-center space-y-6">
-              <div className="space-y-2">
-                <span className="bg-green-500/20 text-green-300 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
-                  Verified as @{linkedGithub}
-                </span>
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <span className="bg-green-500/20 text-green-300 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
+                    Verified as @{linkedIdentity?.handle || linkedGithub}
+                  </span>
+                  {linkedIdentity?.github_id && Number(linkedIdentity.github_id) > 0 ? (
+                    <span className="bg-white/10 text-white/80 text-xs font-mono px-3 py-1 rounded-full">
+                      ID: #{linkedIdentity.github_id}
+                    </span>
+                  ) : null}
+                </div>
                 <h2 className="text-2xl font-bold text-white pt-2">Your GitHub is verified!</h2>
                 <p className="text-white/70 text-sm max-w-md mx-auto">
-                  You can now submit public good projects for GenLayer AI evaluation and public funding.
+                  Your wallet is securely bound to your canonical profile{" "}
+                  <a 
+                    href={linkedIdentity?.canonical_url || `https://github.com/${linkedGithub}`}
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-green-300 underline font-medium hover:text-green-200"
+                  >
+                    ({linkedIdentity?.canonical_url || `github.com/${linkedGithub}`})
+                  </a>
+                  . You can now submit projects for public goods funding.
                 </p>
               </div>
               
-              <div className="pt-2">
+              <div className="flex flex-col gap-3 pt-2">
                 <Link
                   href="/dashboard"
                   className="w-full py-4 bg-white text-black font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-white/90 transition-all shadow-lg"
                 >
                   Submit a Project
                   <ArrowRight className="w-4 h-4" />
+                </Link>
+                <Link
+                  href="/dashboard"
+                  className="w-full py-3 text-white/60 text-sm font-medium flex items-center justify-center gap-2 hover:text-white transition-colors"
+                >
+                  Go to Dashboard
                 </Link>
               </div>
             </div>
@@ -159,9 +182,9 @@ function OnboardingContent() {
                       <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm flex items-start gap-3">
                         <AlertTriangle className="w-5 h-5 flex-shrink-0 text-red-400 mt-0.5" />
                         <div>
-                          <p className="font-semibold">Verification was unsuccessful.</p>
+                          <p className="font-semibold">Verification Unsuccessful</p>
                           <p className="text-xs text-red-300/80 mt-1">
-                            Please make sure your wallet address is in your GitHub bio and try again.
+                            GenLayer validators could not find your wallet address in your GitHub bio, or the transaction failed. Make sure your exact wallet address is visible in your GitHub profile bio, then try again.
                           </p>
                         </div>
                       </div>
@@ -176,11 +199,14 @@ function OnboardingContent() {
                           disabled
                           className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white/50 cursor-not-allowed"
                         />
-                        <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-3">
-                          <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0" />
-                          <p className="text-xs text-amber-300 font-medium">
-                            Verification Pending. You can leave this page while we verify.
-                          </p>
+                        <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-start gap-3">
+                          <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-xs text-amber-300 font-semibold">Verification in Progress</p>
+                            <p className="text-xs text-amber-300/80 mt-1">
+                              GenLayer AI validators are checking your GitHub bio. This typically takes a few minutes on Studionet. You can leave this page — your progress is saved and you&apos;ll see the result when you return.
+                            </p>
+                          </div>
                         </div>
                         <Link
                           href="/dashboard"
