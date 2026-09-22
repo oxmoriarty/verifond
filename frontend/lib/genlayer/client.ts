@@ -1,24 +1,24 @@
 "use client";
 
 import { createClient } from "genlayer-js";
-import { testnetBradbury } from "genlayer-js/chains";
+import { studionet } from "genlayer-js/chains";
 // @ts-ignore
 import { createWalletClient, custom, type WalletClient } from "viem";
 
 // GenLayer Network Configuration (from environment variables with fallbacks)
-export const GENLAYER_CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_GENLAYER_CHAIN_ID || "4221");
+export const GENLAYER_CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_GENLAYER_CHAIN_ID || "61999");
 export const GENLAYER_CHAIN_ID_HEX = `0x${GENLAYER_CHAIN_ID.toString(16).toUpperCase()}`;
 
 export const GENLAYER_NETWORK = {
   chainId: GENLAYER_CHAIN_ID_HEX,
-  chainName: process.env.NEXT_PUBLIC_GENLAYER_CHAIN_NAME || "GenLayer Testnet Bradbury",
+  chainName: process.env.NEXT_PUBLIC_GENLAYER_CHAIN_NAME || "GenLayer Studio Network",
   nativeCurrency: {
     name: process.env.NEXT_PUBLIC_GENLAYER_SYMBOL || "GEN",
     symbol: process.env.NEXT_PUBLIC_GENLAYER_SYMBOL || "GEN",
     decimals: 18,
   },
-  rpcUrls: [process.env.NEXT_PUBLIC_GENLAYER_RPC_URL || "https://rpc-bradbury.genlayer.com"],
-  blockExplorerUrls: ["https://explorer-bradbury.genlayer.com"],
+  rpcUrls: [process.env.NEXT_PUBLIC_GENLAYER_RPC_URL || "https://studio.genlayer.com/api"],
+  blockExplorerUrls: [process.env.NEXT_PUBLIC_EXPLORER_URL || "https://explorer-studio.genlayer.com/"],
 };
 
 // Ethereum provider type from window
@@ -40,7 +40,7 @@ declare global {
  */
 export function getStudioUrl(): string {
   return (
-    process.env.NEXT_PUBLIC_GENLAYER_RPC_URL || "https://rpc-bradbury.genlayer.com"
+    process.env.NEXT_PUBLIC_GENLAYER_RPC_URL || "https://studio.genlayer.com/api"
   );
 }
 
@@ -282,7 +282,7 @@ export function createMetaMaskWalletClient(): WalletClient | null {
 
   try {
     return createWalletClient({
-      chain: testnetBradbury as any,
+      chain: studionet as any,
       transport: custom(provider),
     });
   } catch (error) {
@@ -300,7 +300,7 @@ export function createMetaMaskWalletClient(): WalletClient | null {
  */
 export function createGenLayerClient(address?: string) {
   const config: any = {
-    chain: testnetBradbury,
+    chain: studionet,
     endpoint: getStudioUrl(),
   };
 
@@ -314,17 +314,39 @@ export function createGenLayerClient(address?: string) {
     console.error("Error creating GenLayer client:", error);
     // Return client without account on error
     return createClient({
-      chain: testnetBradbury,
+      chain: studionet,
       endpoint: getStudioUrl(),
     });
   }
 }
 
 /**
- * Get a client instance with MetaMask account
+ * Get a read-only client instance (no wallet signing needed)
  */
 export async function getClient() {
   const accounts = await getAccounts();
   const address = accounts[0];
   return createGenLayerClient(address);
+}
+
+/**
+ * Get a write-ready client instance with MetaMask connected to Studionet.
+ *
+ * The genlayer-js SDK requires calling `client.connect("studionet")` before
+ * any write transaction. This installs the GenLayer MetaMask Snap and switches
+ * MetaMask to the correct network, enabling proper transaction signing.
+ *
+ * See: https://docs.genlayer.com — "Browser dApps" section
+ */
+export async function getWriteClient() {
+  const accounts = await getAccounts();
+  const address = accounts[0];
+  const client = createGenLayerClient(address);
+
+  // This is REQUIRED before writeContract — it:
+  // 1. Switches MetaMask to Studionet (chain 61999)
+  // 2. Installs/verifies the GenLayer MetaMask Snap for transaction signing
+  await client.connect("studionet");
+
+  return client;
 }

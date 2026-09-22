@@ -109,42 +109,45 @@ The Next.js backend endpoints authenticate all pending mutations:
 
 ---
 
-## 6. Completed Production Write on Bradbury Testnet
+## 6. Production Write & Deployment Plan on Bradbury Testnet
 
-### Contract Details
+### Baseline Contract Verification (Pre-Remediation)
+- **Baseline Contract Address:** `0xbD9d2Df4d3601C8cb5EF4e5A0A329481C7942E6F`
 - **Network:** GenLayer Testnet Bradbury (Chain ID `4221`)
-- **RPC Endpoint:** `https://rpc-bradbury.genlayer.com`
-- **Explorer:** `https://explorer-bradbury.genlayer.com`
-- **Contract Address:** `0xbD9d2Df4d3601C8cb5EF4e5A0A329481C7942E6F`
-- **Deployer / Submitter:** `0x719C366DCF36C828aA90dc3Da28d3cB7A8Dcb894`
-- **Linked GitHub Identity:** `oxmoriarty`
+- **Verified Submitter:** `0x719C366DCF36C828aA90dc3Da28d3cB7A8Dcb894`
+- **Bound GitHub Handle:** `oxmoriarty`
+- **Historical Executed Submissions:**
+  - **Zendapp** (`id: 1`, `status: Approved`, `score: 8`, `allocated: 5 GEN`, `withdrawn: true`)
+  - **Quota** (`id: 2`, `status: Approved`, `score: 8`, `allocated: 7 GEN`, `withdrawn: true`)
 
-### Live Production Submissions Verified On-Chain
-Querying `get_all_projects()` on `0xbD9d2Df4d3601C8cb5EF4e5A0A329481C7942E6F` returns:
+> [!IMPORTANT]
+> `0xbD9d2Df4d3601C8cb5EF4e5A0A329481C7942E6F` is the **previous production contract**. The newly remediated `contracts/rpgf.py` contract (with 4-way identity binding, repository tree/history/contributors/fork evaluation, and treasury solvency reservation) is now fully coded, unit tested (5/5 passing), and ready for deployment.
 
-#### Production Write 1: Zendapp
-- **Project ID:** `1`
-- **Submitter:** `0x719C366DCF36C828aA90dc3Da28d3cB7A8Dcb894`
-- **URL:** `https://github.com/oxmoriarty/zendapp`
-- **Amount Requested:** `6 GEN` ($6 \times 10^{18}$ wei)
-- **Allocated Funds:** `5 GEN` ($5 \times 10^{18}$ wei)
-- **AI Score:** `8 / 10`
-- **Consensus Status:** `Approved` (Finalized with consensus)
-- **Payout State:** `withdrawn: true` (Claim transaction executed)
-- **Evaluator Reason:**
-  > *"Verified project description matches repository content: a payment app for the Arc chain enabling USDC transfers via usernames. The repository contains substantial functional code (TypeScript, Next.js, full-stack with database, email, push notifications, QR scanning, WebAuthn). It is not a fork, has recent commits, includes a live demo, and demonstrates real work with detailed documentation."*
+---
 
-#### Production Write 2: Quota
-- **Project ID:** `2`
-- **Submitter:** `0x719C366DCF36C828aA90dc3Da28d3cB7A8Dcb894`
-- **URL:** `https://github.com/oxmoriarty/quota`
-- **Amount Requested:** `7 GEN` ($7 \times 10^{18}$ wei)
-- **Allocated Funds:** `7 GEN` ($7 \times 10^{18}$ wei)
-- **AI Score:** `8 / 10`
-- **Consensus Status:** `Approved` (Finalized with consensus)
-- **Payout State:** `withdrawn: true` (Claim transaction executed)
-- **Evaluator Reason:**
-  > *"Repository contains a functional TypeScript/Genlayer project with multiple components (frontend, contracts, scripts, tests), active commits up to August 2026, and a deployed demo site. The project description accurately matches the repository's purpose as an AI-powered hackathon prize allocation platform, solving a public goods problem in open-source collaboration and fair compensation. The work is original (not a fork) and demonstrates real execution."*
+### Step-by-Step Deployment & Production Write for Reviewer Acceptance
+
+#### Step 1: Deploy Remediated Contract to Bradbury
+Run the deployment script from the project root:
+```bash
+npm run deploy
+# Or using GenLayer CLI:
+genlayer deploy
+```
+*Enter your keystore password when prompted.*
+
+#### Step 2: Update Contract Address in Frontend Environment
+Copy the newly deployed contract address output from the deployer and update `frontend/.env`:
+```env
+NEXT_PUBLIC_CONTRACT_ADDRESS=0x<NEW_DEPLOYED_CONTRACT_ADDRESS>
+```
+
+#### Step 3: Execute Production Writes on Bradbury
+Once deployed, perform the completed production writes:
+1. **Link Identity:** Call `verify_and_link_github(profile_url)` to bind wallet proof, canonical GitHub URL, API handle, and immutable numeric GitHub user ID.
+2. **Fund Treasury:** Call `donate()` with GEN to initialize the unreserved funding pool.
+3. **Submit Project:** Call `submit_project(name, details, url, amount_requested)` to trigger the on-chain AI consensus evaluation over repository tree, history, contributors, and fork data.
+4. **Inspect Refreshed State:** Read `get_treasury_details()`, `get_reserved_funds()`, and `get_linked_identity(wallet)` to demonstrate that allocations are reserved against treasury funds.
 
 ---
 

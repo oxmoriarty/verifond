@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { getClient } from "../genlayer/client";
+import { getClient, getWriteClient } from "../genlayer/client";
 import { useWallet } from "../genlayer/wallet";
 import { success, error } from "../utils/toast";
 
@@ -316,7 +316,7 @@ export function useSubmitProject() {
 
       setIsSubmitting(true);
 
-      const client = await getClient();
+      const client = await getWriteClient();
       
       // Send transaction (returns instantly after signing)
       const txHash = await client.writeContract({
@@ -405,8 +405,8 @@ export function useDonate() {
       if (!address) throw new Error("Wallet not connected.");
       if (!CONTRACT_ADDRESS) throw new Error("Contract address is not configured.");
 
-      const client = await getClient();
-      
+      const client = await getWriteClient();
+
       const txHash = await client.writeContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
         functionName: "donate",
@@ -445,7 +445,7 @@ export function useClaimFunds() {
       if (!address) throw new Error("Wallet not connected.");
       if (!CONTRACT_ADDRESS) throw new Error("Contract address is not configured.");
 
-      const client = await getClient();
+      const client = await getWriteClient();
       
       // Pre-flight check: ensure treasury has enough funds
       try {
@@ -681,7 +681,7 @@ export function useVerifyGithub() {
       if (!address) throw new Error("Wallet not connected.");
       if (!CONTRACT_ADDRESS) throw new Error("Contract address is not configured.");
       
-      const client = await getClient();
+      const client = await getWriteClient();
       
       const txHash = await client.writeContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
@@ -718,6 +718,7 @@ export function useVerifyGithub() {
       success("Verification Submitted!", { description: "Your transaction is submitted. GenLayer AI verification takes about 20 minutes to finalize on Testnet." });
     },
     onError: (err: any) => {
+      console.error("[useVerifyGithub] Raw error:", err);
       const msg = typeof err === 'string' ? err : (err?.message || '');
       if (msg.includes("rejected") || msg.includes("User denied") || msg.includes("cancelled")) {
         error("Transaction Cancelled", { description: "You cancelled the transaction. Verification was not started." });
