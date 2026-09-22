@@ -330,23 +330,23 @@ export async function getClient() {
 }
 
 /**
- * Get a write-ready client instance with MetaMask connected to Studionet.
+ * Get a write-ready client instance with MetaMask switched to Studionet.
  *
- * The genlayer-js SDK requires calling `client.connect("studionet")` before
- * any write transaction. This installs the GenLayer MetaMask Snap and switches
- * MetaMask to the correct network, enabling proper transaction signing.
+ * Before every write transaction we ensure MetaMask is on the correct
+ * chain (61999 / Studionet). Without this, MetaMask might be on a
+ * different chain and silently send the transaction to the wrong network.
  *
- * See: https://docs.genlayer.com — "Browser dApps" section
+ * No MetaMask Snap is required — MetaMask handles eth_sendTransaction
+ * natively for any EVM-compatible chain.
  */
 export async function getWriteClient() {
   const accounts = await getAccounts();
   const address = accounts[0];
-  const client = createGenLayerClient(address);
 
-  // This is REQUIRED before writeContract — it:
-  // 1. Switches MetaMask to Studionet (chain 61999)
-  // 2. Installs/verifies the GenLayer MetaMask Snap for transaction signing
-  await client.connect("studionet");
+  // Ensure MetaMask is on Studionet before sending any write transaction.
+  // This adds the network to MetaMask if not already present, then switches to it.
+  await switchToGenLayerNetwork();
 
-  return client;
+  return createGenLayerClient(address);
 }
+
