@@ -8,11 +8,11 @@ This report documents the implementation and on-chain verification of all review
 
 | Reviewer Requirement | Implementation Detail | Verification Status |
 | :--- | :--- | :--- |
-| **1. Identity Binding** | Binds wallet proof, canonical GitHub URL (`https://github.com/{username}`), API handle, and immutable numeric GitHub User ID (`u256`) to one account with strict 1-to-1 uniqueness. | **Verified** (`test_identity_binding_uniqueness` passed, live on-chain `get_linked_identity`) |
+| **1. Identity Binding** | Binds wallet proof, canonical GitHub URL (`https://github.com/{username}`), API handle, and immutable numeric GitHub User ID (`u256`) to one account with strict 1-to-1 uniqueness and case-insensitive wallet address matching (accepting EIP-55 checksum, uppercase, and lowercase formats). | **Verified** (`test_identity_binding_uniqueness` and `test_identity_case_insensitive_verification` passed, live on-chain `get_linked_identity`) |
 | **2. Repository Evaluation** | Evaluates pinned repository directory tree (`/contents`), commit history (`/commits`), contributor records (`/contributors`), and fork data (`/repos/{owner}/{repo}`) in the Intelligent Contract AI consensus prompt. | **Verified** (`test_fork_and_tree_rejection` passed, 5 sources ingested in `fetch_data()`) |
 | **3. Treasury Solvency** | Approved allocations are immediately reserved against treasury funds (`self.total_reserved += allocated_wei`), capping approvals by `available_treasury = self.treasury - self.total_reserved`. | **Verified** (`test_treasury_solvency_reservation_cap` passed, `get_treasury_details()` view) |
 | **4. Mutation Authentication** | Authenticates pending-state mutations on `/api/pending-projects` and `/api/pending-verifications` using wallet proof and transaction proof against GenLayer RPC. | **Verified** (`serverAuth.ts` + updated API route handlers) |
-| **5. CI & Direct Tests** | Repaired `.github/workflows/ci.yml` lint target to `contracts/rpgf.py` and expanded `tests/direct/test_rpgf.py` to 5 full unit tests. | **Verified** (5/5 tests passing in 1.23s, Next.js build clean) |
+| **5. CI & Direct Tests** | Repaired `.github/workflows/ci.yml` lint target to `contracts/rpgf.py` and expanded `tests/direct/test_rpgf.py` to 6 full unit tests. | **Verified** (6/6 tests passing in 2.66s, Next.js build clean) |
 | **6. Completed Production Write** | Real production writes on Bradbury showing transaction hash, validator consensus finalization, refreshed contract state, and error handling. | **Verified** (Live state on contract `0xbD9d2Df4d3601C8cb5EF4e5A0A329481C7942E6F`) |
 
 ---

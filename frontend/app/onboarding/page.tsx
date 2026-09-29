@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useWallet } from "@/lib/genlayer/wallet";
 import { useCheckLinkedGithub, useLinkedIdentity, useVerifyGithub, usePendingVerification } from "@/lib/hooks/useRPGF";
+import { getPendingVerification, clearPendingVerification } from "@/lib/verificationStorage";
 import { Navbar } from "@/components/Navbar";
 import { Loader2, Github, Copy, Check, ArrowRight, CheckCircle2, AlertTriangle } from "lucide-react";
 
@@ -21,7 +22,6 @@ function OnboardingContent() {
 
   const [githubUrl, setGithubUrl] = useState("");
   const [copied, setCopied] = useState(false);
-  const [localPendingUrl, setLocalPendingUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!walletLoading && !isConnected) {
@@ -29,14 +29,26 @@ function OnboardingContent() {
     }
   }, [isConnected, walletLoading, router]);
 
+  // Read local storage record synchronously
+  const localRecord = typeof window !== 'undefined' ? getPendingVerification(address) : null;
+  const effectivePending = pendingVerification || localRecord;
+
+  // Clear local storage if verified
+  useEffect(() => {
+    if (linkedGithub && !isUpdateMode && address) {
+      clearPendingVerification(address);
+    }
+  }, [linkedGithub, isUpdateMode, address]);
+
+  // Cleanly compute the three primary verification states
+  const isVerified = !!linkedGithub && !isUpdateMode;
+  const isPending = !isVerified && effectivePending?.status === 'Pending';
+  const isFailed = !isVerified && !isPending && effectivePending?.status === 'Failed';
+
   const handleVerify = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!githubUrl) return;
-    verifyGithub({ profileUrl: githubUrl, isUpdate: isUpdateMode }, {
-      onSuccess: () => {
-        setLocalPendingUrl(githubUrl);
-      }
-    });
+    if (!githubUrl || isPending || isVerifying || isVerified) return;
+    verifyGithub({ profileUrl: githubUrl, isUpdate: isUpdateMode });
   };
 
   const handleCopy = () => {
@@ -46,24 +58,13 @@ function OnboardingContent() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (walletLoading || isCheckingGithub || isCheckingPending) {
+  if (walletLoading || isCheckingGithub) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-white/40" />
       </div>
     );
   }
-
-  useEffect(() => {
-    if (pendingVerification?.status === 'Failed' || (!!linkedGithub && !isUpdateMode)) {
-      setLocalPendingUrl(null);
-    }
-  }, [pendingVerification?.status, linkedGithub, isUpdateMode]);
-
-  // Pending card shows ONLY after wallet approval (when pendingVerification exists on-chain or locally approved)
-  const isVerified = !!linkedGithub && !isUpdateMode;
-  const isFailed = !isVerified && pendingVerification?.status === 'Failed';
-  const isPending = !isVerified && !isFailed && ((!!pendingVerification && pendingVerification?.status === 'Pending') || !!localPendingUrl);
 
   return (
     <main className="min-h-screen bg-[#050505] text-white selection:bg-white/30 font-sans pb-24 relative overflow-hidden">
@@ -184,7 +185,7 @@ function OnboardingContent() {
                     </p>
 
                     {/* FAILED STATE ALERT (Only shown when on-chain verification completes and fails) */}
-                    {isFailed && !isPending && (
+                    {isFailed && (
                       <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm flex items-start gap-3">
                         <AlertTriangle className="w-5 h-5 flex-shrink-0 text-red-400 mt-0.5" />
                         <div>
@@ -201,9 +202,9 @@ function OnboardingContent() {
                       <div className="space-y-4">
                         <input
                           type="url"
-                          value={pendingVerification?.profile_url || githubUrl}
+                          value={effectivePending?.profile_url || githubUrl}
                           disabled
-                          className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white/50 cursor-not-allowed"
+                          className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white/50 cursor-not-allowed select-none"
                         />
                         <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-3">
                           <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0" />

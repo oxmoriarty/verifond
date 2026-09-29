@@ -5,6 +5,12 @@ import { useState } from "react";
 import { getClient, getWriteClient } from "../genlayer/client";
 import { useWallet } from "../genlayer/wallet";
 import { success, error } from "../utils/toast";
+import { 
+  getPendingVerification, 
+  savePendingVerification, 
+  updatePendingVerificationStatus, 
+  clearPendingVerification 
+} from "../verificationStorage";
 
 export interface Project {
   id: number;
@@ -510,7 +516,7 @@ export function useCheckLinkedGithub() {
   const { address } = useWallet();
 
   return useQuery({
-    queryKey: ["linkedGithub", address],
+    queryKey: ["linkedGithub", address?.toLowerCase()],
     queryFn: async () => {
       if (!address || !CONTRACT_ADDRESS) return null;
       try {
@@ -523,12 +529,13 @@ export function useCheckLinkedGithub() {
         
         const username = res && String(res).trim() ? String(res).trim() : null;
         
-        // If we found a linked GitHub, delete any stale pending verification from Supabase
+        // If we found a linked GitHub, clear pending verification from local storage and backend
         if (username) {
+          clearPendingVerification(address);
           fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`, { 
             method: 'DELETE',
             headers: { 'x-wallet-address': address }
-          }).catch(console.error);
+          }).catch(() => {});
         }
         
         return username;
@@ -575,160 +582,204 @@ export function useLinkedIdentity() {
 }
 
 export function usePendingVerification() {
-    const { address } = useWallet();
-    const queryClient = useQueryClient();
-  
-    return useQuery({
-      queryKey: ["pendingVerification", address?.toLowerCase()],
-      queryFn: async () => {
-        if (!address) return null;
+  const { address } = useWallet();
+  const queryClient = useQueryClient();
+
+  return useQuery({
+    queryKey: ["pendingVerification", address?.toLowerCase()],
+    initialData: () => {
+      if (!address) return undefined;
+      return getPendingVerification(address) || undefined;
+    },
+    queryFn: async () => {
+      if (!address) return null;
+      try {
+        // 1. Get stored local verification
+        const localRecord = getPendingVerification(address);
+
+        // 2. Best-effort fetch from backend
+        let apiData = null;
         try {
           const res = await fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`);
-          if (!res.ok) return null;
-          const pendingData = await res.json();
-          if (!pendingData) return null;
-          
-          // If the record is already explicitly marked as Failed in the DB, just return it so the UI shows failure.
-          if (pendingData.status === 'Failed') {
-            return pendingData;
+          if (res.ok) {
+            apiData = await res.json();
           }
-
-          const client = await getClient();
-
-          // 1. Check if transaction has already succeeded on-chain by reading get_linked_github
-          if (CONTRACT_ADDRESS) {
-            try {
-              const resLinked: any = await client.readContract({
-                address: CONTRACT_ADDRESS as `0x${string}`,
-                functionName: "get_linked_github",
-                args: [address],
-              });
-              const username = resLinked && String(resLinked).trim() ? String(resLinked).trim() : "";
-              if (username) {
-                // Succeeded! The account is officially verified on-chain. Safe to delete pending record.
-                await fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`, { 
-                  method: 'DELETE',
-                  headers: { 'x-wallet-address': address }
-                }).catch(console.error);
-                queryClient.invalidateQueries({ queryKey: ["linkedGithub", address] });
-                queryClient.invalidateQueries({ queryKey: ["linkedIdentity", address?.toLowerCase()] });
-                return null;
-              }
-            } catch (err) {
-              console.error("Error checking linked github on-chain:", err);
-            }
-          }
-
-          // 2. Check the transaction status on GenLayer
-          const hash = pendingData.tx_hash || pendingData.txHash || pendingData.txhash;
-          if (hash) {
-            try {
-              const tx: any = await client.getTransaction({ 
-                hash: hash as any 
-              });
-              
-              if (tx) {
-                const statusName = (tx.statusName || tx.status || '').toString().toUpperCase();
-                const leaderReceipt = tx.consensus_data?.leader_receipt;
-                const leaderObj = Array.isArray(leaderReceipt) ? leaderReceipt[0] : leaderReceipt;
-                const execResult = (leaderObj?.execution_result || tx.txExecutionResultName || '').toString().toUpperCase();
-                const txError = leaderObj?.error;
-
-                const isConsensusFailed = 
-                  statusName === 'UNDETERMINED' || 
-                  statusName === 'CANCELED' || 
-                  statusName === 'VALIDATORS_TIMEOUT' || 
-                  statusName === 'LEADER_TIMEOUT' ||
-                  execResult.includes('ERROR') ||
-                  !!txError;
-
-                if (isConsensusFailed) {
-                  // Transaction failed on-chain. Update Supabase so the UI permanently knows it failed.
-                  await fetch(`/api/pending-verifications`, {
-                    method: 'PATCH',
-                    headers: { 
-                      'Content-Type': 'application/json',
-                      'x-wallet-address': address
-                    },
-                    body: JSON.stringify({ wallet_address: address.toLowerCase(), status: 'Failed', txHash: hash })
-                  }).catch(console.error);
-                  return { ...pendingData, status: 'Failed' };
-                }
-
-                // If transaction is completed (FINALIZED or ACCEPTED), but get_linked_github was STILL empty:
-                // That means the verification failed (wallet was not found in the bio, or match failed)!
-                if (statusName === 'FINALIZED' || statusName === 'ACCEPTED') {
-                  // Double check on-chain link
-                  let isLinkedNow = false;
-                  if (CONTRACT_ADDRESS) {
-                    try {
-                      const checkAgain: any = await client.readContract({
-                        address: CONTRACT_ADDRESS as `0x${string}`,
-                        functionName: "get_linked_github",
-                        args: [address],
-                      });
-                      isLinkedNow = !!(checkAgain && String(checkAgain).trim());
-                    } catch (e) {}
-                  }
-
-                  if (isLinkedNow) {
-                    await fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`, { 
-                      method: 'DELETE',
-                      headers: { 'x-wallet-address': address }
-                    }).catch(console.error);
-                    queryClient.invalidateQueries({ queryKey: ["linkedGithub", address] });
-                    queryClient.invalidateQueries({ queryKey: ["linkedIdentity", address?.toLowerCase()] });
-                    return null;
-                  } else {
-                    // Completed but wallet not linked -> Verification Unsuccessful!
-                    await fetch(`/api/pending-verifications`, {
-                      method: 'PATCH',
-                      headers: { 
-                        'Content-Type': 'application/json',
-                        'x-wallet-address': address
-                      },
-                      body: JSON.stringify({ wallet_address: address.toLowerCase(), status: 'Failed', txHash: hash })
-                    }).catch(console.error);
-                    return { ...pendingData, status: 'Failed' };
-                  }
-                }
-
-                // Still in progress ('PENDING', 'PROPOSING', 'COMMITTING', 'REVEALING', etc.)
-                return pendingData;
-              }
-            } catch (e: any) {
-              // getTransaction might throw if tx is still in memory pool / propagating.
-              // Fallback: If pending for > 15 minutes, assume Genlayer dropped it.
-              if (pendingData.created_at) {
-                const createdTime = new Date(pendingData.created_at).getTime();
-                const ageInMinutes = (Date.now() - createdTime) / 1000 / 60;
-                
-                if (ageInMinutes > 15) {
-                  console.error("Transaction pending for >15 minutes without finality. Assuming dropped.");
-                  await fetch(`/api/pending-verifications`, {
-                    method: 'PATCH',
-                    headers: { 
-                      'Content-Type': 'application/json',
-                      'x-wallet-address': address
-                    },
-                    body: JSON.stringify({ wallet_address: address.toLowerCase(), status: 'Failed', txHash: hash })
-                  }).catch(console.error);
-                  return { ...pendingData, status: 'Failed' };
-                }
-              }
-            }
-          }
-
-          return pendingData;
         } catch (e) {
-          console.error("Failed to fetch pending verification", e);
+          // Backend offline or error, safely ignore
+        }
+
+        const pendingData = localRecord || apiData;
+        if (!pendingData) {
           return null;
         }
-      },
-      enabled: !!address,
-      refetchInterval: 5000,
-    });
-  }
+
+        // If explicitly marked as Failed, return it so UI shows failure card
+        if (pendingData.status === 'Failed') {
+          return pendingData;
+        }
+
+        const client = await getClient();
+
+        // 3. Check if transaction has already succeeded on-chain (get_linked_github)
+        if (CONTRACT_ADDRESS) {
+          try {
+            const resLinked: any = await client.readContract({
+              address: CONTRACT_ADDRESS as `0x${string}`,
+              functionName: "get_linked_github",
+              args: [address],
+            });
+            const username = resLinked && String(resLinked).trim() ? String(resLinked).trim() : "";
+            if (username) {
+              clearPendingVerification(address);
+              fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`, { 
+                method: 'DELETE',
+                headers: { 'x-wallet-address': address }
+              }).catch(() => {});
+              queryClient.invalidateQueries({ queryKey: ["linkedGithub", address?.toLowerCase()] });
+              queryClient.invalidateQueries({ queryKey: ["linkedIdentity", address?.toLowerCase()] });
+              return null;
+            }
+          } catch (err) {
+            console.error("Error checking linked github on-chain:", err);
+          }
+        }
+
+        // 4. Check the transaction status on GenLayer
+        const hash = pendingData.tx_hash || pendingData.txHash || (pendingData as any).txhash;
+        if (hash) {
+          try {
+            const tx: any = await client.getTransaction({ 
+              hash: hash as any 
+            });
+            
+            if (tx) {
+              let statusName = (tx.statusName || '').toString().toUpperCase();
+              const numStatus = tx.status;
+              
+              if (!statusName && numStatus !== undefined) {
+                const numStr = String(numStatus);
+                const mapping: Record<string, string> = {
+                  "0": "UNINITIALIZED",
+                  "1": "PENDING",
+                  "2": "PROPOSING",
+                  "3": "COMMITTING",
+                  "4": "REVEALING",
+                  "5": "ACCEPTED",
+                  "6": "UNDETERMINED",
+                  "7": "FINALIZED",
+                  "8": "CANCELED",
+                  "9": "APPEAL_REVEALING",
+                  "10": "APPEAL_COMMITTING",
+                  "11": "READY_TO_FINALIZE",
+                  "12": "VALIDATORS_TIMEOUT",
+                  "13": "LEADER_TIMEOUT"
+                };
+                statusName = mapping[numStr] || String(numStatus).toUpperCase();
+              }
+
+              const leaderReceipt = tx.consensus_data?.leader_receipt;
+              const leaderObj = Array.isArray(leaderReceipt) ? leaderReceipt[0] : leaderReceipt;
+              const execResult = (leaderObj?.execution_result || tx.txExecutionResultName || '').toString().toUpperCase();
+              const txError = leaderObj?.error;
+              const resultName = (tx.resultName || '').toString().toUpperCase();
+
+              const isConsensusFailed = 
+                statusName === 'UNDETERMINED' || 
+                statusName === 'CANCELED' || 
+                statusName === 'VALIDATORS_TIMEOUT' || 
+                statusName === 'LEADER_TIMEOUT' ||
+                resultName === 'FAILURE' ||
+                execResult.includes('ERROR') ||
+                !!txError;
+
+              if (isConsensusFailed) {
+                updatePendingVerificationStatus(address, 'Failed');
+                fetch(`/api/pending-verifications`, {
+                  method: 'PATCH',
+                  headers: { 
+                    'Content-Type': 'application/json',
+                    'x-wallet-address': address
+                  },
+                  body: JSON.stringify({ wallet_address: address.toLowerCase(), status: 'Failed', txHash: hash })
+                }).catch(() => {});
+                return { ...pendingData, status: 'Failed' };
+              }
+
+              // If transaction is finalized or accepted, but get_linked_github was STILL empty:
+              if (statusName === 'FINALIZED' || statusName === 'ACCEPTED') {
+                let isLinkedNow = false;
+                if (CONTRACT_ADDRESS) {
+                  try {
+                    const checkAgain: any = await client.readContract({
+                      address: CONTRACT_ADDRESS as `0x${string}`,
+                      functionName: "get_linked_github",
+                      args: [address],
+                    });
+                    isLinkedNow = !!(checkAgain && String(checkAgain).trim());
+                  } catch (e) {}
+                }
+
+                if (isLinkedNow) {
+                  clearPendingVerification(address);
+                  fetch(`/api/pending-verifications?wallet=${address.toLowerCase()}`, { 
+                    method: 'DELETE',
+                    headers: { 'x-wallet-address': address }
+                  }).catch(() => {});
+                  queryClient.invalidateQueries({ queryKey: ["linkedGithub", address?.toLowerCase()] });
+                  queryClient.invalidateQueries({ queryKey: ["linkedIdentity", address?.toLowerCase()] });
+                  return null;
+                } else {
+                  updatePendingVerificationStatus(address, 'Failed');
+                  fetch(`/api/pending-verifications`, {
+                    method: 'PATCH',
+                    headers: { 
+                      'Content-Type': 'application/json',
+                      'x-wallet-address': address
+                    },
+                    body: JSON.stringify({ wallet_address: address.toLowerCase(), status: 'Failed', txHash: hash })
+                  }).catch(() => {});
+                  return { ...pendingData, status: 'Failed' };
+                }
+              }
+
+              // Still in progress ('PENDING', 'PROPOSING', 'COMMITTING', 'REVEALING', etc.)
+              return { ...pendingData, status: 'Pending' };
+            }
+          } catch (e: any) {
+            // getTransaction might throw if tx is newly submitted and still propagating
+            if (pendingData.created_at) {
+              const createdTime = new Date(pendingData.created_at).getTime();
+              const ageInMinutes = (Date.now() - createdTime) / 1000 / 60;
+              
+              if (ageInMinutes > 15) {
+                console.error("Transaction pending for >15 minutes without finality. Assuming dropped.");
+                updatePendingVerificationStatus(address, 'Failed');
+                fetch(`/api/pending-verifications`, {
+                  method: 'PATCH',
+                  headers: { 
+                    'Content-Type': 'application/json',
+                    'x-wallet-address': address
+                  },
+                  body: JSON.stringify({ wallet_address: address.toLowerCase(), status: 'Failed', txHash: hash })
+                }).catch(() => {});
+                return { ...pendingData, status: 'Failed' };
+              }
+            }
+            return { ...pendingData, status: 'Pending' };
+          }
+        }
+
+        return pendingData;
+      } catch (e) {
+        console.error("Failed to fetch pending verification", e);
+        return getPendingVerification(address);
+      }
+    },
+    enabled: !!address,
+    refetchInterval: 5000,
+    refetchOnWindowFocus: true,
+  });
+}
 
 export function useVerifyGithub() {
   const { address } = useWallet();
@@ -748,31 +799,53 @@ export function useVerifyGithub() {
         value: BigInt(0),
       });
 
-      // Post pending verification to Supabase backend with wallet authentication proof
-      const res = await fetch('/api/pending-verifications', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-wallet-address': address
-        },
-        body: JSON.stringify({
-          txHash,
-          wallet_address: address.toLowerCase(),
-          profile_url: profileUrl,
-          status: 'Pending'
-        }),
+      // 1. Immediately persist to client storage synchronously!
+      const record = savePendingVerification(address, {
+        profile_url: profileUrl,
+        tx_hash: txHash,
+        status: 'Pending',
+        created_at: new Date().toISOString()
       });
 
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("Supabase Database Error during POST:", errorText);
+      // 2. Immediately seed React Query cache
+      queryClient.setQueryData(["pendingVerification", address.toLowerCase()], record);
+
+      // 3. Best-effort async sync with Supabase backend (do not block or throw on failure)
+      try {
+        await fetch('/api/pending-verifications', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-wallet-address': address
+          },
+          body: JSON.stringify({
+            txHash,
+            wallet_address: address.toLowerCase(),
+            profile_url: profileUrl,
+            status: 'Pending'
+          }),
+        });
+      } catch (postErr) {
+        console.warn("Could not sync pending verification to Supabase (offline/paused):", postErr);
       }
 
-      return { txHash, profileUrl };
+      return { txHash, profileUrl, record };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (address) {
+        const record = data.record || {
+          wallet_address: address.toLowerCase(),
+          tx_hash: data.txHash,
+          txHash: data.txHash,
+          profile_url: data.profileUrl,
+          status: 'Pending',
+          created_at: new Date().toISOString()
+        };
+        queryClient.setQueryData(["pendingVerification", address.toLowerCase()], record);
+      }
       queryClient.invalidateQueries({ queryKey: ["pendingVerification", address?.toLowerCase()] });
       queryClient.invalidateQueries({ queryKey: ["linkedGithub", address?.toLowerCase()] });
+      queryClient.invalidateQueries({ queryKey: ["linkedIdentity", address?.toLowerCase()] });
       success("Verification Submitted!", { description: "Verification in progress. You can leave this page while we verify." });
     },
     onError: (err: any) => {
