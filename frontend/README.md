@@ -22,10 +22,11 @@ The modern, responsive Next.js frontend for Verifund - an autonomous Retroactive
 
 2. Configure environment variables in `.env.local` or `.env`:
    ```bash
-   NEXT_PUBLIC_GENLAYER_RPC_URL=https://rpc-bradbury.genlayer.com
-   NEXT_PUBLIC_GENLAYER_CHAIN_ID=4221
-   NEXT_PUBLIC_GENLAYER_CHAIN_NAME="GenLayer Testnet Bradbury"
+   NEXT_PUBLIC_GENLAYER_RPC_URL=https://studio.genlayer.com/api
+   NEXT_PUBLIC_GENLAYER_CHAIN_ID=61999
+   NEXT_PUBLIC_GENLAYER_CHAIN_NAME="GenLayer Studio Network"
    NEXT_PUBLIC_GENLAYER_SYMBOL=GEN
+   NEXT_PUBLIC_EXPLORER_URL=https://explorer-studio.genlayer.com/
    NEXT_PUBLIC_CONTRACT_ADDRESS="your_deployed_rpgf_address_here"
    ```
    *Note: If `NEXT_PUBLIC_CONTRACT_ADDRESS` is set to `0x0000000000000000000000000000000000000000`, the app will load with mock data.*

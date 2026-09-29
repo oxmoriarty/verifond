@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { ProjectForm } from "@/components/ProjectForm";
 import { ProjectCard } from "@/components/ProjectCard";
-import { useProjects, usePendingProjects, useTreasury, useDonate, useCheckLinkedGithub, usePendingVerification, Project } from "@/lib/hooks/useRPGF";
+import { useProjects, usePendingProjects, useTreasury, useTreasuryDetails, useDonate, useCheckLinkedGithub, useLinkedIdentity, usePendingVerification, Project } from "@/lib/hooks/useRPGF";
 import { Loader2, LayoutGrid, Globe, Coins, ShieldAlert, PlusCircle, Check, X, Github, CheckCircle2 } from "lucide-react";
 
 export default function Dashboard() {
@@ -21,9 +21,11 @@ export default function Dashboard() {
   const { data: onChainProjects = [], isLoading: projectsLoading } = useProjects();
   const { data: pendingProjects = [], isLoading: pendingLoading } = usePendingProjects();
   const { data: treasuryBalance = 0, isLoading: treasuryLoading } = useTreasury();
+  const { data: treasuryDetails, isLoading: detailsLoading } = useTreasuryDetails();
   const { mutate: donate, isPending: isDonating } = useDonate();
 
   const { data: linkedGithub, isLoading: isCheckingGithub } = useCheckLinkedGithub();
+  const { data: linkedIdentity } = useLinkedIdentity();
   const { data: pendingVerification, isLoading: isCheckingPending } = usePendingVerification();
 
   const [showSuccessScreen, setShowSuccessScreen] = useState(false);
@@ -108,16 +110,31 @@ export default function Dashboard() {
                   </Link>
                 )}
               </p>
-              <div className="text-white font-mono text-sm truncate flex items-center gap-2">
+              <div className="text-white font-mono text-sm flex flex-col gap-1.5">
                 {linkedGithub ? (
                   <>
-                    <Github className="w-4 h-4 text-white/70" />
-                    @{linkedGithub}
-                    <CheckCircle2 className="w-4 h-4 text-green-400" />
+                    <div className="flex items-center gap-2 truncate">
+                      <Github className="w-4 h-4 text-white/70 flex-shrink-0" />
+                      <a 
+                        href={linkedIdentity?.canonical_url || `https://github.com/${linkedGithub}`}
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="hover:underline truncate text-white"
+                        title={linkedIdentity?.canonical_url || `https://github.com/${linkedGithub}`}
+                      >
+                        @{linkedIdentity?.handle || linkedGithub}
+                      </a>
+                      <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0" />
+                    </div>
+                    {linkedIdentity?.github_id && Number(linkedIdentity.github_id) > 0 ? (
+                      <span className="text-[11px] text-white/50 font-mono">
+                        GitHub User ID: #{linkedIdentity.github_id}
+                      </span>
+                    ) : null}
                   </>
                 ) : pendingVerification && pendingVerification.status !== 'Failed' ? (
                   <Link href="/onboarding" className="text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
                     Verification Pending...
                   </Link>
                 ) : (
@@ -334,10 +351,30 @@ export default function Dashboard() {
             {activeTab === "TREASURY" && (
               <div className="space-y-6">
                 <div className="bg-gradient-to-br from-blue-900/40 to-purple-900/40 border border-white/10 rounded-3xl p-8 md:p-12 text-center">
-                  <h2 className="text-lg font-medium text-white/60 mb-2">Total Treasury Balance</h2>
-                  <p className="text-5xl md:text-7xl font-bold text-white mb-8">
-                    {treasuryLoading ? <Loader2 className="w-10 h-10 animate-spin mx-auto text-white/40" /> : `${treasuryBalance} GEN`}
+                  <h2 className="text-xs font-semibold uppercase tracking-wider text-white/60 mb-2">Available for Allocation</h2>
+                  <p className="text-5xl md:text-7xl font-bold text-white mb-6">
+                    {detailsLoading || treasuryLoading ? (
+                      <Loader2 className="w-10 h-10 animate-spin mx-auto text-white/40" />
+                    ) : (
+                      `${treasuryDetails?.availableTreasury ?? treasuryBalance} GEN`
+                    )}
                   </p>
+                  
+                  {/* Solvency Reservation Breakdown */}
+                  <div className="grid grid-cols-2 gap-4 max-w-lg mx-auto mb-8 bg-white/5 p-4 rounded-2xl border border-white/10">
+                    <div className="text-left">
+                      <p className="text-xs text-white/50 font-medium">Total Contract Treasury</p>
+                      <p className="text-lg font-bold text-white">
+                        {detailsLoading || treasuryLoading ? "..." : `${treasuryDetails?.totalTreasury ?? treasuryBalance} GEN`}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-white/50 font-medium">Reserved for Approvals</p>
+                      <p className="text-lg font-bold text-amber-400">
+                        {detailsLoading || treasuryLoading ? "..." : `${treasuryDetails?.totalReserved ?? 0} GEN`}
+                      </p>
+                    </div>
+                  </div>
                   
                   <div className="max-w-md mx-auto bg-black/40 rounded-2xl p-6 backdrop-blur-md border border-white/5">
                     <h3 className="text-white font-medium mb-4">Donate to Public Goods</h3>
@@ -364,10 +401,10 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                <div className="bg-white/5 border border-yellow-500/20 rounded-2xl p-6 flex gap-4">
-                  <ShieldAlert className="w-6 h-6 text-yellow-500 flex-shrink-0" />
+                <div className="bg-white/5 border border-emerald-500/20 rounded-2xl p-6 flex gap-4">
+                  <ShieldAlert className="w-6 h-6 text-emerald-400 flex-shrink-0" />
                   <p className="text-white/70 text-sm leading-relaxed">
-                    <strong>Treasury Rules:</strong> Verifond ensures fair distribution. By donating, you are funding public goods.
+                    <strong>Treasury Solvency Guarantee:</strong> When a project is evaluated and approved, its funding allocation is immediately reserved and locked against the treasury on-chain. This guarantees solvency and ensures approved projects are fully funded before authors claim.
                   </p>
                 </div>
               </div>

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Linting
-genvm-lint check contracts/football_bets.py    # Lint a contract
+genvm-lint check contracts/rpgf.py             # Lint the RPGF contract
 
 # Testing
 pytest tests/direct/ -v                        # Direct mode tests (fast, no Studio)
@@ -112,9 +112,9 @@ The GenVM linter catches contract issues before deployment:
 - Bare Python exceptions (must use `gl.vm.UserError` or `Exception`)
 
 ## Frontend Patterns
-
-- Contract interactions: `frontend/lib/contracts/FootballBets.ts`
-- React hooks: `frontend/lib/hooks/useFootballBets.ts`
+ 
+- Contract interactions: `contracts/rpgf.py`
+- React hooks: `frontend/lib/hooks/useRPGF.ts`
 - Wallet context: `frontend/lib/genlayer/WalletProvider.tsx`
 - GenLayer client: `frontend/lib/genlayer/client.ts`
 

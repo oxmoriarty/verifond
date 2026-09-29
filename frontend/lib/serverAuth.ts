@@ -23,7 +23,7 @@ export function isValidTxHash(hash: string | null | undefined): boolean {
  * Queries GenLayer RPC for transaction receipt proof
  */
 export async function queryGenLayerReceipt(txHash: string): Promise<any | null> {
-  const rpcUrl = process.env.NEXT_PUBLIC_GENLAYER_RPC_URL || "https://rpc-bradbury.genlayer.com";
+  const rpcUrl = process.env.NEXT_PUBLIC_GENLAYER_RPC_URL || "https://studio.genlayer.com/api";
   try {
     const res = await fetch(rpcUrl, {
       method: "POST",

@@ -54,10 +54,16 @@ function OnboardingContent() {
     );
   }
 
+  useEffect(() => {
+    if (pendingVerification?.status === 'Failed' || (!!linkedGithub && !isUpdateMode)) {
+      setLocalPendingUrl(null);
+    }
+  }, [pendingVerification?.status, linkedGithub, isUpdateMode]);
+
   // Pending card shows ONLY after wallet approval (when pendingVerification exists on-chain or locally approved)
-  const isFailed = pendingVerification?.status === 'Failed';
-  const isPending = (!!pendingVerification && pendingVerification?.status !== 'Failed') || !!localPendingUrl;
   const isVerified = !!linkedGithub && !isUpdateMode;
+  const isFailed = !isVerified && pendingVerification?.status === 'Failed';
+  const isPending = !isVerified && !isFailed && ((!!pendingVerification && pendingVerification?.status === 'Pending') || !!localPendingUrl);
 
   return (
     <main className="min-h-screen bg-[#050505] text-white selection:bg-white/30 font-sans pb-24 relative overflow-hidden">
@@ -199,14 +205,11 @@ function OnboardingContent() {
                           disabled
                           className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white/50 cursor-not-allowed"
                         />
-                        <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-start gap-3">
-                          <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-xs text-amber-300 font-semibold">Verification in Progress</p>
-                            <p className="text-xs text-amber-300/80 mt-1">
-                              GenLayer AI validators are checking your GitHub bio. This typically takes a few minutes on Studionet. You can leave this page — your progress is saved and you&apos;ll see the result when you return.
-                            </p>
-                          </div>
+                        <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-3">
+                          <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0" />
+                          <p className="text-xs text-amber-300 font-medium">
+                            Verification in progress. You can leave this page while we verify.
+                          </p>
                         </div>
                         <Link
                           href="/dashboard"

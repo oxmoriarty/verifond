@@ -1,10 +1,10 @@
 {
-  "name": "GenLayer Football Market",
-  "short_name": "GenLayer Market",
-  "description": "AI-powered football match predictions on GenLayer blockchain",
+  "name": "Verifund",
+  "short_name": "Verifund",
+  "description": "Autonomous Retroactive Public Goods Funding powered by GenLayer Intelligent Contracts",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#000000",
+  "background_color": "#050505",
   "theme_color": "#9B6AF6",
   "icons": [
     {

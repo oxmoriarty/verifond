@@ -28,7 +28,8 @@ class _Recipient:
     class Write:
         pass
 
-class RPGFContract(gl.Contract):
+
+class RPGF(gl.Contract):
     # State variables for RPGF
     projects: TreeMap[u256, ProjectInfo]
     next_project_id: u256
@@ -83,24 +84,37 @@ class RPGFContract(gl.Contract):
         return self._run_github_verification(sender, new_profile_url, is_update=True)
 
     def _run_github_verification(self, sender: str, profile_url: str, is_update: bool) -> str:
+        sender_lower = sender.strip().lower()
+        sender_upper = sender_lower.upper()
         task = f"""
         You are a decentralized identity verifier. A user is attempting to link their GitHub account to their Web3 wallet.
         
+        Target Wallet Address to verify: {sender_lower}
+        
         Your task:
         1. Scan the text/HTML content of the provided GitHub profile webpage.
-        2. Look for the EXACT Ethereum wallet address: {sender}
-        3. The address must be visibly present in the profile content (e.g., in bio or pinned text).
+        2. Look for the user's Ethereum wallet address: {sender_lower}
+           CRITICAL MATCHING RULE - CASE-INSENSITIVE ADDRESS MATCH:
+           - In Ethereum, hexadecimal character casing (A-F vs a-f) does NOT matter and does NOT alter the wallet address.
+           - Wallets and profiles often format addresses in mixed-case EIP-55 checksum format (e.g. "{sender}") or uppercase ("{sender_upper}").
+           - You MUST match the wallet address CASE-INSENSITIVELY. As long as the hexadecimal characters match {sender_lower} (with or without '0x' prefix), it IS a valid match.
+           - NEVER reject or fail verification because of character casing differences.
+        3. The address must be visibly present in the profile content (e.g., in bio, pinned text, or profile readme).
         4. Extract the user's unique username from the profile URL or content.
-        5. Extract the user's numeric GitHub User ID (found in HTML meta tags or user metadata, e.g. octolytics-dimension:user_id).
+        5. Extract the user's numeric GitHub User ID (found in GitHub API user data e.g. "id": 1234567, or HTML meta tags octolytics-dimension:user_id).
         
         Return a JSON object with:
-        - "verified": boolean (true if exact address is present in bio)
+        - "verified": boolean (true if the wallet address is found in the profile text matching case-insensitively)
         - "username": string (the extracted handle, lowercase)
         - "user_id": integer (numeric GitHub user ID, or 0 if unextracted)
         - "reason": string
         """
         
-        criteria = "Must return a valid JSON object with 'verified' (bool), 'username' (string), 'user_id' (int), and 'reason' (string). 'verified' MUST be true only if exact wallet address is in profile text."
+        criteria = (
+            "Must return a valid JSON object with 'verified' (bool), 'username' (string), 'user_id' (int), and 'reason' (string). "
+            "'verified' MUST be true if the expected wallet address is present in the profile text when compared case-insensitively. "
+            "Casing differences (such as mixed-case EIP-55 checksum or uppercase letters) MUST be accepted as a valid match and MUST NOT cause verification to fail."
+        )
         
         def fetch_data():
             try:
@@ -117,7 +131,13 @@ class RPGFContract(gl.Contract):
             except Exception:
                 api_content = "Failed to fetch GitHub API data."
                 
-            return f"Profile URL: {profile_url}\n\nGitHub API User Data:\n{api_content}\n\nWebpage Content:\n{content}"
+            return (
+                f"Target Wallet Address (case-insensitive): {sender_lower}\n"
+                f"Alternative Format: {sender_upper}\n"
+                f"Profile URL: {profile_url}\n\n"
+                f"GitHub API User Data:\n{api_content}\n\n"
+                f"Webpage Content:\n{content}"
+            )
 
         result = gl.eq_principle.prompt_non_comparative(fetch_data, task=task, criteria=criteria)
         
@@ -593,3 +613,7 @@ class RPGFContract(gl.Contract):
                 "weaknesses": w_list
             })
         return json.dumps(all_projs)
+
+
+RPGFContract = RPGF
+

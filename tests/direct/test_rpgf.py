@@ -117,6 +117,35 @@ def test_identity_binding_uniqueness(direct_vm, direct_deploy, direct_alice, dir
         contract.verify_and_link_github("https://github.com/dev_bob")
 
 
+def test_identity_case_insensitive_verification(direct_vm, direct_deploy, direct_alice):
+    contract = direct_deploy("contracts/rpgf.py")
+    direct_vm.sender = direct_alice
+    alice_hex_lower = "0x" + direct_alice.hex().lower()
+    alice_hex_mixed = "0x" + direct_alice.hex() # mixed/original casing
+
+    # Profile contains mixed-case address
+    direct_vm.mock_web(".*", {"status": 200, "body": f"Developer profile. Verified wallet: {alice_hex_mixed}"})
+    mock_verify = json.dumps({
+        "verified": True,
+        "username": "case_dev",
+        "user_id": 445566,
+        "reason": "Address matched case-insensitively in profile"
+    })
+    direct_vm.mock_llm(".*decentralized identity verifier.*", mock_verify)
+
+    username = contract.verify_and_link_github("https://github.com/case_dev")
+    assert username == "case_dev"
+    
+    # Query with mixed case and uppercase must resolve identically
+    assert contract.get_linked_github(alice_hex_mixed) == "case_dev"
+    assert contract.get_linked_github(alice_hex_lower.upper()) == "case_dev"
+
+    identity = json.loads(contract.get_linked_identity(alice_hex_lower.upper()))
+    assert identity["linked"] is True
+    assert identity["wallet"] == alice_hex_lower
+    assert identity["handle"] == "case_dev"
+
+
 def test_treasury_solvency_reservation_cap(direct_vm, direct_deploy, direct_alice):
     contract = direct_deploy("contracts/rpgf.py")
     direct_vm.sender = direct_alice
