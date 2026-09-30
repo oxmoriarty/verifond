@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { ProjectForm } from "@/components/ProjectForm";
 import { ProjectCard } from "@/components/ProjectCard";
-import { useProjects, usePendingProjects, useTreasury, useTreasuryDetails, useDonate, useCheckLinkedGithub, useLinkedIdentity, usePendingVerification, Project } from "@/lib/hooks/useRPGF";
+import { useProjects, usePendingProjects, useTreasury, useTreasuryDetails, useDonate, useCheckLinkedGithub, useLinkedIdentity, usePendingVerification, Project, unifyProjects } from "@/lib/hooks/useRPGF";
 import { Loader2, LayoutGrid, Globe, Coins, ShieldAlert, PlusCircle, Check, X, Github, CheckCircle2 } from "lucide-react";
 
 export default function Dashboard() {
@@ -62,29 +62,10 @@ export default function Dashboard() {
     );
   }
 
-  // Normalize URLs for reliable matching
-  const normalizeUrl = (u: string) => (u || "").trim().toLowerCase().replace(/\/$/, "");
-
-  // Set of URLs that are already finalized on-chain (Approved/Rejected)
-  const finalizedUrls = new Set(onChainProjects.map(p => normalizeUrl(p.url)));
-
-  // Filter out any pending or failed projects if an on-chain finalized version already exists
-  const nonFinalizedPending = pendingProjects.filter(p => !finalizedUrls.has(normalizeUrl(p.url)));
-
-  // Deduplicate by URL among pending/failed entries (latest/pending takes priority over older failed)
-  const pendingByUrl = new Map<string, Project>();
-  for (const p of nonFinalizedPending) {
-    const key = normalizeUrl(p.url);
-    const existing = pendingByUrl.get(key);
-    // If no existing entry or current is Pending while existing is Failed, use current
-    if (!existing || (p.status === "Pending" && existing.status === "Failed")) {
-      pendingByUrl.set(key, p);
-    }
-  }
-
-  const activePendingProjects = Array.from(pendingByUrl.values());
-  const allProjects = [...activePendingProjects, ...onChainProjects].sort((a, b) => (b.id || 0) - (a.id || 0));
-  const myProjects = allProjects.filter(p => p.submitter.toLowerCase() === address?.toLowerCase());
+  // Unify and deduplicate all projects (by repo and name) into single representations with correct status & attempt limits
+  const unifiedProjects = unifyProjects(pendingProjects, onChainProjects);
+  const myProjects = unifiedProjects.filter(p => p.submitter?.toLowerCase() === address?.toLowerCase());
+  const globalProjects = unifiedProjects.filter(p => (p.id && p.id > 0) || p.status === "Approved" || p.status === "Rejected");
 
   return (
     <div className="min-h-screen bg-[#050505] relative selection:bg-white/20 selection:text-white">
@@ -327,7 +308,7 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-bold text-white">Global Submissions</h2>
                   <span className="bg-white/10 px-3 py-1 rounded-full text-sm font-medium">
-                    {onChainProjects.length} Projects
+                    {globalProjects.length} Projects
                   </span>
                 </div>
                 
@@ -335,14 +316,14 @@ export default function Dashboard() {
                    <div className="h-64 flex items-center justify-center border border-white/10 rounded-2xl">
                      <Loader2 className="w-6 h-6 animate-spin text-white/40" />
                    </div>
-                ) : onChainProjects.length === 0 ? (
+                ) : globalProjects.length === 0 ? (
                   <div className="h-64 flex flex-col items-center justify-center border border-white/10 rounded-2xl bg-white/5">
                     <Globe className="w-12 h-12 text-white/20 mb-4" />
                     <p className="text-white/60">No verified projects have been evaluated yet.</p>
                   </div>
                 ) : (
                   <div className="grid gap-4">
-                    {onChainProjects.map((p, i) => <ProjectCard key={p.txHash || p.id || i} project={p} />)}
+                    {globalProjects.map((p, i) => <ProjectCard key={p.txHash || p.id || i} project={p} />)}
                   </div>
                 )}
               </div>

@@ -19,11 +19,14 @@ export function ProjectCard({ project }: { project: Project }) {
   const identifier = project.id || project.txHash;
   const isMyProject = !project.submitter || (address && project.submitter.toLowerCase() === address.toLowerCase());
   const isFailed = project.status === "Failed";
+  const isRejected = project.status === "Rejected";
+  const rejectionCount = project.rejection_count ?? 0;
+  const canResubmit = project.can_resubmit ?? (isFailed || (isRejected && rejectionCount < 3));
 
   const handleResubmit = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!project.name || !project.url || isSubmitting) return;
+    if (!project.name || !project.url || isSubmitting || !canResubmit) return;
 
     submitProject({
       name: project.name,
@@ -38,18 +41,27 @@ export function ProjectCard({ project }: { project: Project }) {
       
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex flex-wrap items-center gap-3 mb-3">
             <span className={`text-xs font-medium px-3 py-1 rounded-full border ${statusColor}`}>
               {project.status === "Pending" ? "Pending Review" : project.status}
             </span>
+            {isRejected && (
+              <span className={`text-xs font-medium px-3 py-1 rounded-full border ${
+                rejectionCount >= 3 
+                  ? "bg-red-500/20 text-red-400 border-red-500/30" 
+                  : "bg-amber-500/20 text-amber-300 border-amber-500/30"
+              }`}>
+                {rejectionCount >= 3 ? "Locked (3/3 Rejections)" : `Rejection ${rejectionCount} of 3`}
+              </span>
+            )}
             {project.score > 0 && (
               <span className="text-xs font-medium px-3 py-1 rounded-full bg-white/10 text-white/80 border border-white/10">
                 Score: {project.score}/10
               </span>
             )}
-            {project.allocated_funds !== undefined && project.allocated_funds > 0 && (
+            {project.status === "Approved" && (
               <span className="text-xs font-medium px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                Allocated: {project.allocated_funds} GEN
+                Allocated: {project.allocated_funds && project.allocated_funds > 0 ? project.allocated_funds : 20} GEN
               </span>
             )}
           </div>
@@ -69,20 +81,30 @@ export function ProjectCard({ project }: { project: Project }) {
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center justify-end gap-2.5">
-          {isFailed && isMyProject && (
-            <button
-              onClick={handleResubmit}
-              disabled={isSubmitting}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25 hover:border-red-500/50 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(239,68,68,0.15)]"
-              title="Resubmit project with existing details"
-            >
-              {isSubmitting ? (
-                <Loader2 className="w-4 h-4 animate-spin text-red-400" />
-              ) : (
-                <RotateCcw className="w-4 h-4 text-red-400" />
-              )}
-              <span>{isSubmitting ? "Resubmitting..." : "Resubmit"}</span>
-            </button>
+          {isMyProject && (isFailed || isRejected) && (
+            canResubmit ? (
+              <button
+                onClick={handleResubmit}
+                disabled={isSubmitting}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(239,68,68,0.15)] ${
+                  isRejected 
+                    ? "bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 hover:border-amber-500/50" 
+                    : "bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25 hover:border-red-500/50"
+                }`}
+                title="Resubmit project with existing details"
+              >
+                {isSubmitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="w-4 h-4" />
+                )}
+                <span>{isSubmitting ? "Resubmitting..." : "Resubmit"}</span>
+              </button>
+            ) : isRejected ? (
+              <span className="text-xs text-red-400/80 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 font-medium">
+                Max Rejections (3/3)
+              </span>
+            ) : null
           )}
 
           <Link

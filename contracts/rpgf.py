@@ -411,12 +411,16 @@ class RPGF(gl.Contract):
         if not isinstance(allocated_gen, int):
             allocated_gen = 0
             
-        if status != "Approved":
+        # Determine allocated GEN for approved projects (minimum 1 GEN, bounded by requested amount and 100 GEN cap)
+        if status == "Approved":
+            if available_gen > 0:
+                allocated_gen = max(1, min(allocated_gen if allocated_gen > 0 else requested_gen, requested_gen, 100, available_gen))
+            else:
+                # When treasury pool has not yet been seeded, award the AI suggested allocation (never 0)
+                allocated_gen = max(1, min(allocated_gen if allocated_gen > 0 else requested_gen, requested_gen, 100))
+        else:
             allocated_gen = 0
-            
-        # Deterministic Python capping at min(allocated_gen, requested_gen, 100, available_gen)
-        # Reserve approved allocations against unreserved treasury funds
-        allocated_gen = max(0, min(allocated_gen, requested_gen, 100, available_gen))
+
         allocated_wei = u256(allocated_gen) * (u256(10) ** u256(18))
 
         # Reserve allocated funds against treasury immediately upon approval

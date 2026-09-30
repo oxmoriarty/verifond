@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useSubmitProject, useCheckLinkedGithub } from "@/lib/hooks/useRPGF";
-import { Link as LinkIcon, AlignLeft, Send, Loader2, Coins, Type } from "lucide-react";
+import { useSubmitProject, useCheckLinkedGithub, useProjects, usePendingProjects, unifyProjects, getProjectIdentityKey } from "@/lib/hooks/useRPGF";
+import { Link as LinkIcon, AlignLeft, Send, Loader2, Coins, Type, AlertCircle, Info } from "lucide-react";
 import Link from "next/link";
 
 export function ProjectForm() {
@@ -12,6 +12,18 @@ export function ProjectForm() {
   const [amount, setAmount] = useState("");
   const { submitProject, isSubmitting, error } = useSubmitProject();
   const { data: linkedGithub } = useCheckLinkedGithub();
+  const { data: onChainProjects = [] } = useProjects();
+  const { data: pendingProjects = [] } = usePendingProjects();
+
+  const unifiedProjects = unifyProjects(pendingProjects, onChainProjects);
+  const targetKey = (url.trim() && name.trim()) ? getProjectIdentityKey({ url, name }) : "";
+  const existingProject = targetKey ? unifiedProjects.find(p => getProjectIdentityKey(p) === targetKey) : null;
+
+  const isAlreadyApproved = existingProject?.status === "Approved";
+  const isAlreadyPending = existingProject?.status === "Pending";
+  const isMaxRejections = existingProject?.status === "Rejected" && (existingProject.rejection_count ?? 0) >= 3;
+  const isPreviouslyRejected = existingProject?.status === "Rejected" && (existingProject.rejection_count ?? 0) < 3;
+  const isBlocked = isAlreadyApproved || isAlreadyPending || isMaxRejections;
 
   const isValidUrl = (string: string) => {
     try {
@@ -24,11 +36,11 @@ export function ProjectForm() {
 
   const isAmountValid = !isNaN(Number(amount)) && Number(amount) > 0 && Number(amount) <= 100;
   const isGithubUrlMatch = url.trim() === "" || (linkedGithub ? url.toLowerCase().includes(linkedGithub.toLowerCase()) : true);
-  const isFormValid = name.trim() !== "" && url.trim() !== "" && description.trim() !== "" && amount.trim() !== "" && isValidUrl(url) && isAmountValid && isGithubUrlMatch;
+  const isFormValid = name.trim() !== "" && url.trim() !== "" && description.trim() !== "" && amount.trim() !== "" && isValidUrl(url) && isAmountValid && isGithubUrlMatch && !isBlocked;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isFormValid) return;
+    if (!isFormValid || isBlocked) return;
     submitProject(
       { name, details: description, url, amountRequested: Number(amount) },
       {
@@ -83,6 +95,34 @@ export function ProjectForm() {
                 Update Linked GitHub
               </Link>
             </div>
+          </div>
+        )}
+
+        {isAlreadyApproved && (
+          <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-sm mt-2 flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span>This project has already been approved and allocated {existingProject?.allocated_funds && existingProject.allocated_funds > 0 ? existingProject.allocated_funds : 20} GEN. Approved projects cannot be submitted again.</span>
+          </div>
+        )}
+
+        {isAlreadyPending && (
+          <div className="p-3.5 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-400 text-sm mt-2 flex items-start gap-2.5">
+            <Loader2 className="w-4 h-4 flex-shrink-0 mt-0.5 animate-spin" />
+            <span>A submission for this project is currently pending review. Please wait for the evaluation to finalize.</span>
+          </div>
+        )}
+
+        {isMaxRejections && (
+          <div className="p-3.5 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm mt-2 flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span>This project has been rejected 3 times and is permanently locked from future submissions.</span>
+          </div>
+        )}
+
+        {isPreviouslyRejected && (
+          <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-sm mt-2 flex items-start gap-2.5">
+            <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span>This project was previously rejected ({existingProject?.rejection_count} of 3 attempts used). Submitting will be attempt {(existingProject?.rejection_count ?? 0) + 1} of 3.</span>
           </div>
         )}
       </div>

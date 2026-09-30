@@ -254,3 +254,61 @@ def test_fork_and_tree_rejection(direct_vm, direct_deploy, direct_alice):
     assert int(contract.get_available_treasury()) == 100 * 10**18
     assert "Unmodified fork" in p["weaknesses"]
 
+
+def test_approved_project_never_zero_allocation_when_treasury_empty(direct_vm, direct_deploy, direct_alice):
+    contract = direct_deploy("contracts/rpgf.py")
+    direct_vm.sender = direct_alice
+
+    # Setup identity
+    direct_vm.mock_web(".*", {"status": 200, "body": "Web data"})
+    mock_verify = json.dumps({
+        "verified": True,
+        "username": "trader_dev",
+        "user_id": 67757939,
+        "reason": "Valid bio"
+    })
+    direct_vm.mock_llm(".*decentralized identity verifier.*", mock_verify)
+    contract.verify_and_link_github("https://github.com/trader_dev")
+
+    # IMPORTANT: Treasury is 0 GEN! (Not seeded yet)
+    assert int(contract.get_treasury()) == 0
+    assert int(contract.get_available_treasury()) == 0
+
+    # Project is evaluated as Approved with suggested_allocation = 20 GEN
+    direct_vm.clear_mocks()
+    direct_vm.mock_web(".*", {"status": 200, "body": "Sample autonomous agent code"})
+    mock_approved = json.dumps({
+        "score": 8,
+        "status": "Approved",
+        "reason": "The repository demonstrates a well-structured application.",
+        "suggested_allocation": 20,
+        "repo_id": 1277944656,
+        "repo_owner_id": 67757939,
+        "strengths": ["Comprehensive architecture"],
+        "weaknesses": []
+    })
+    direct_vm.mock_llm(".*RPGF.*", mock_approved)
+
+    project_id = contract.submit_project("TradingAgent", "AI Agent", "https://github.com/trader_dev/agent", 20)
+    
+    # Must be stored with allocated_funds = 20 GEN (NOT 0 GEN!)
+    p = json.loads(contract.get_project(project_id))
+    assert p["status"] == "Approved"
+    assert p["allocated_funds"] == 20 * 10**18
+    assert int(contract.get_reserved_funds()) == 20 * 10**18
+
+    # Attempting to claim before treasury is funded will revert with clear message
+    with direct_vm.expect_revert("Treasury is currently empty"):
+        contract.claim_funds(project_id)
+
+    # Now someone donates 100 GEN to the treasury pool
+    direct_vm.value = 100 * 10**18
+    contract.donate()
+    assert int(contract.get_treasury()) == 100 * 10**18
+
+    # Now Alice can claim her 20 GEN
+    contract.claim_funds(project_id)
+    assert int(contract.get_treasury()) == 80 * 10**18
+    assert int(contract.get_reserved_funds()) == 0
+
+

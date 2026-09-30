@@ -4,7 +4,7 @@ import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { useWallet } from "@/lib/genlayer/wallet";
-import { useProjects, usePendingProjects, useClaimFunds, useSubmitProject, Project } from "@/lib/hooks/useRPGF";
+import { useProjects, usePendingProjects, useClaimFunds, useSubmitProject, Project, unifyProjects, getProjectIdentityKey } from "@/lib/hooks/useRPGF";
 import { ExternalLink, ArrowLeft, ShieldCheck, CheckCircle2, Loader2, DollarSign, AlertCircle, RotateCcw } from "lucide-react";
 
 export default function ProjectDetailsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -22,28 +22,15 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ id: s
   useEffect(() => {
     if (projectsLoading || pendingLoading) return;
     
-    // De-duplicate projects logic matching Dashboard
     const normalizeUrl = (u: string) => (u || "").trim().toLowerCase().replace(/\/$/, "");
-    const finalizedUrls = new Set(onChainProjects.map(p => normalizeUrl(p.url)));
-    const nonFinalizedPending = pendingProjects.filter(p => !finalizedUrls.has(normalizeUrl(p.url)));
+    const unified = unifyProjects(pendingProjects, onChainProjects);
 
-    const pendingByUrl = new Map<string, Project>();
-    for (const p of nonFinalizedPending) {
-      const key = normalizeUrl(p.url);
-      const existing = pendingByUrl.get(key);
-      if (!existing || (p.status === "Pending" && existing.status === "Failed")) {
-        pendingByUrl.set(key, p);
-      }
-    }
-
-    const activePendingProjects = Array.from(pendingByUrl.values());
-    const allProjects = [...activePendingProjects, ...onChainProjects];
-    
-    // Find project by ID, TxHash, or URL fallback
-    const foundProject = allProjects.find(
-      p => p.id?.toString() === identifier || p.txHash === identifier
-    ) || allProjects.find(
-      p => normalizeUrl(p.url) === normalizeUrl(identifier)
+    // Find project by ID, TxHash, or URL / identity key fallback
+    const foundProject = unified.find(
+      p => p.id?.toString() === identifier || p.txHash?.toLowerCase() === identifier.toLowerCase()
+    ) || unified.find(
+      p => getProjectIdentityKey(p) === getProjectIdentityKey({ url: identifier, name: "" })
+        || normalizeUrl(p.url) === normalizeUrl(identifier)
     );
     
     setProject(foundProject || null);
@@ -71,6 +58,10 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ id: s
   }
 
   const isMyProject = !project.submitter || (address && project.submitter.toLowerCase() === address.toLowerCase());
+  const isFailed = project.status === "Failed";
+  const isRejected = project.status === "Rejected";
+  const rejectionCount = project.rejection_count ?? 0;
+  const canResubmit = project.can_resubmit ?? (isFailed || (isRejected && rejectionCount < 3));
 
   let statusColor = "bg-white/10 text-white/60 border-white/10";
   if (project.status === "Approved") statusColor = "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
@@ -79,7 +70,7 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ id: s
   if (project.status === "Failed") statusColor = "bg-red-500/10 text-red-500 border-red-500/20";
 
   const handleResubmit = () => {
-    if (!project.name || !project.url || isSubmitting) return;
+    if (!project.name || !project.url || isSubmitting || !canResubmit) return;
 
     submitProject(
       {
@@ -117,14 +108,23 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ id: s
                 <span className={`px-4 py-1.5 rounded-full text-sm font-semibold border ${statusColor}`}>
                   {project.status === "Pending" ? "Pending Review" : project.status}
                 </span>
+                {isRejected && (
+                  <span className={`px-4 py-1.5 rounded-full text-sm font-semibold border ${
+                    rejectionCount >= 3 
+                      ? "bg-red-500/20 text-red-400 border-red-500/30" 
+                      : "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                  }`}>
+                    {rejectionCount >= 3 ? "Locked (3/3 Rejections)" : `Rejection ${rejectionCount} of 3`}
+                  </span>
+                )}
                 {project.score > 0 && (
                   <span className="px-4 py-1.5 rounded-full bg-white/10 text-white/80 text-sm font-semibold border border-white/10">
                     Score: {project.score}/10
                   </span>
                 )}
-                {project.allocated_funds !== undefined && project.allocated_funds > 0 && (
+                {project.status === "Approved" && (
                   <span className="px-4 py-1.5 rounded-full bg-emerald-500/20 text-emerald-400 text-sm font-semibold border border-emerald-500/30">
-                    Allocated: {project.allocated_funds} GEN
+                    Allocated: {project.allocated_funds && project.allocated_funds > 0 ? project.allocated_funds : 20} GEN
                   </span>
                 )}
               </div>
@@ -153,7 +153,9 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ id: s
                   }`}
                 >
                   {isClaiming ? <Loader2 className="w-5 h-5 animate-spin" /> : <DollarSign className="w-5 h-5" />}
-                  {project.withdrawn ? `${project.allocated_funds} GEN Claimed` : `Claim ${project.allocated_funds} GEN`}
+                  {project.withdrawn 
+                    ? `${project.allocated_funds && project.allocated_funds > 0 ? project.allocated_funds : 20} GEN Claimed` 
+                    : `Claim ${project.allocated_funds && project.allocated_funds > 0 ? project.allocated_funds : 20} GEN`}
                 </button>
                   {!project.withdrawn && (
                     <p className="text-xs text-white/40 mt-3 text-center md:text-right w-full">
@@ -163,20 +165,47 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ id: s
               </div>
             )}
 
-            {/* Resubmit Button for Failed Projects */}
-            {isMyProject && project.status === "Failed" && (
+            {/* Resubmit Button for Failed or Rejected Projects */}
+            {isMyProject && (isFailed || isRejected) && (
               <div className="flex flex-col items-start md:items-end w-full md:w-auto mt-4 md:mt-0">
-                <button
-                  onClick={handleResubmit}
-                  disabled={isSubmitting}
-                  className="flex items-center justify-center gap-2.5 w-full md:w-auto px-8 py-4 rounded-xl text-base md:text-lg font-bold transition-all bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-500/30 hover:border-red-500/60 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_25px_rgba(239,68,68,0.2)]"
-                >
-                  {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin text-red-400" /> : <RotateCcw className="w-5 h-5 text-red-400" />}
-                  <span>{isSubmitting ? "Resubmitting Project..." : "Resubmit Project"}</span>
-                </button>
-                <p className="text-xs text-white/40 mt-2 text-center md:text-right w-full">
-                  Resubmits with the same details and requested amount.
-                </p>
+                {canResubmit ? (
+                  <>
+                    <button
+                      onClick={handleResubmit}
+                      disabled={isSubmitting}
+                      className={`flex items-center justify-center gap-2.5 w-full md:w-auto px-8 py-4 rounded-xl text-base md:text-lg font-bold transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+                        isRejected
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 hover:border-amber-500/60 shadow-[0_0_25px_rgba(245,158,11,0.2)]"
+                          : "bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-500/30 hover:border-red-500/60 shadow-[0_0_25px_rgba(239,68,68,0.2)]"
+                      }`}
+                    >
+                      {isSubmitting ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <RotateCcw className="w-5 h-5" />
+                      )}
+                      <span>
+                        {isSubmitting 
+                          ? "Resubmitting Project..." 
+                          : isRejected 
+                            ? `Resubmit Project (Attempt ${rejectionCount + 1} of 3)` 
+                            : "Resubmit Project"}
+                      </span>
+                    </button>
+                    <p className="text-xs text-white/40 mt-2 text-center md:text-right w-full">
+                      Resubmits with the same details and requested amount.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="px-6 py-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 font-semibold text-sm">
+                      Locked (3/3 Rejections Reached)
+                    </div>
+                    <p className="text-xs text-white/40 mt-2 text-center md:text-right w-full">
+                      This project has been rejected 3 times and cannot be resubmitted.
+                    </p>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -288,6 +317,31 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ id: s
                       </div>
                     )}
                   </div>
+
+                  {isRejected && isMyProject && (
+                    <div className="pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <div>
+                        <p className="text-white/80 font-medium text-sm">
+                          {canResubmit ? "Want to address this feedback and try again?" : "Maximum Attempts Reached"}
+                        </p>
+                        <p className="text-white/40 text-xs mt-0.5">
+                          {canResubmit 
+                            ? `You have used ${rejectionCount} of 3 evaluation attempts for this project.`
+                            : "This project has been rejected 3 times and is permanently locked."}
+                        </p>
+                      </div>
+                      {canResubmit && (
+                        <button
+                          onClick={handleResubmit}
+                          disabled={isSubmitting}
+                          className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 hover:scale-105 active:scale-95 disabled:opacity-50"
+                        >
+                          {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin text-amber-300" /> : <RotateCcw className="w-4 h-4 text-amber-300" />}
+                          <span>{isSubmitting ? "Resubmitting..." : `Resubmit (Attempt ${rejectionCount + 1} of 3)`}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   <div className="pt-6 flex items-center justify-center gap-2 text-sm text-white/40">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500/70" />

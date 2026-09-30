@@ -11,6 +11,16 @@ import {
   updatePendingVerificationStatus, 
   clearPendingVerification 
 } from "../verificationStorage";
+import {
+  getPendingProjects,
+  savePendingProject,
+  updatePendingProjectStatus,
+  clearPendingProject,
+  getProjectIdentityKey,
+  unifyProjects
+} from "../projectStorage";
+
+export { unifyProjects, getProjectIdentityKey };
 
 export interface Project {
   id: number;
@@ -28,6 +38,8 @@ export interface Project {
   weaknesses?: string[];
   txHash?: string; // Only present for pending projects from Supabase
   created_at?: string;
+  rejection_count?: number;
+  can_resubmit?: boolean;
 }
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "";
@@ -93,157 +105,173 @@ export function useProjects() {
             console.error("Failed to parse projects JSON", e);
         }
         
-        return projects.map((p: any) => ({
-          id: Number(p.id),
-          submitter: p.submitter,
-          name: p.name,
-          details: p.details,
-          url: p.url,
-          amount_requested: Number(p.amount_requested) / 1e18,
-          status: p.status,
-          reason: p.reason,
-          score: Number(p.score),
-          withdrawn: Boolean(p.withdrawn),
-          allocated_funds: Number(p.allocated_funds) / 1e18,
-          strengths: p.strengths || [],
-          weaknesses: p.weaknesses || []
-        }));
+        return projects.map((p: any) => {
+          let allocated = Number(p.allocated_funds) / 1e18;
+          const requested = Number(p.amount_requested) / 1e18;
+
+          // Ensure approved projects always have positive allocated_funds (never 0 GEN)
+          if (p.status === "Approved" && (!allocated || allocated <= 0)) {
+            const match = typeof p.reason === 'string' ? p.reason.match(/["']?suggested_allocation["']?\s*:\s*(\d+)/i) : null;
+            if (match && Number(match[1]) > 0) {
+              allocated = Math.min(Number(match[1]), requested > 0 ? requested : 100);
+            } else if (requested > 0) {
+              allocated = requested;
+            } else {
+              allocated = 20;
+            }
+          }
+
+          return {
+            id: Number(p.id),
+            submitter: p.submitter,
+            name: p.name,
+            details: p.details,
+            url: p.url,
+            amount_requested: requested,
+            status: p.status,
+            reason: p.reason,
+            score: Number(p.score),
+            withdrawn: Boolean(p.withdrawn),
+            allocated_funds: allocated,
+            strengths: p.strengths || [],
+            weaknesses: p.weaknesses || []
+          };
+        });
       } catch (err) {
         console.error("Error fetching projects from GenLayer:", err);
         return [];
       }
     },
     refetchOnWindowFocus: true,
-    refetchInterval: 15000, // Poll every 15s to see if a pending tx finished
+    refetchInterval: 15000,
   });
 }
 
 // ==========================================
-// 2. Fetch Off-Chain Pending Projects (Supabase)
+// 2. Fetch Pending Projects (Storage + Supabase)
 // ==========================================
 export function usePendingProjects() {
+  const { address } = useWallet();
+
   return useQuery<Project[], Error>({
-    queryKey: ["projects", "pending"],
+    queryKey: ["projects", "pending", address?.toLowerCase()],
+    initialData: () => {
+      if (!address) return [];
+      return getPendingProjects(address);
+    },
     queryFn: async () => {
+      // 1. Read local storage projects
+      const localProjects = address ? getPendingProjects(address) : [];
+
+      // 2. Best-effort fetch from backend API
+      let apiProjects: Project[] = [];
       try {
         const response = await fetch('/api/pending-projects');
-        if (!response.ok) throw new Error("Failed to fetch pending projects");
-        const pendingProjects: Project[] = await response.json();
-        
-        if (!pendingProjects || pendingProjects.length === 0) return [];
+        if (response.ok) {
+          apiProjects = await response.json();
+        }
+      } catch (err) {
+        // Backend offline, safely ignore
+      }
 
-        const activeProjects: Project[] = [];
-        const client = await getClient();
+      // Merge by txHash or url
+      const mergedMap = new Map<string, Project>();
+      for (const p of [...localProjects, ...apiProjects]) {
+        const key = (p.txHash || (p as any).tx_hash || p.url || '').toLowerCase();
+        if (key && !mergedMap.has(key)) {
+          mergedMap.set(key, p);
+        }
+      }
 
-        // Check the transaction receipt for each pending project
-        for (const project of pendingProjects) {
-          if (project.status === 'Failed') {
-            activeProjects.push(project);
-            continue;
-          }
+      const pendingProjects = Array.from(mergedMap.values());
+      if (pendingProjects.length === 0) return [];
 
-          const hash = project.txHash || (project as any).tx_hash;
-          if (hash) {
-            try {
-              const receipt = await client.getTransactionReceipt({ 
-                hash: hash as `0x${string}` 
-              });
-              
-              if (receipt) {
-                // GenLayer can return status in lowercase or uppercase depending on viem version/custom RPC
-                const status = (receipt.status || '').toString().toLowerCase();
-                const consensusStatus = ((receipt as any).consensusStatus || (receipt as any).consensus_status || '').toString().toLowerCase();
-                const execResult = ((receipt as any).txExecutionResultName || (receipt as any).tx_execution_result_name || '').toString().toLowerCase();
+      const activeProjects: Project[] = [];
+      const client = await getClient();
 
-                const isFailedTx = 
-                  status === 'reverted' || 
-                  status === 'error' || 
-                  status === '0x0' ||
-                  status === 'undetermined' ||
-                  status === 'canceled' ||
-                  status.includes('timeout') ||
-                  consensusStatus === 'undetermined' ||
-                  consensusStatus.includes('timeout') ||
-                  execResult.includes('error');
-
-                if (isFailedTx) {
-                  // Transaction failed on GenLayer (consensus failed, timeout, undetermined, or VM execution error)
-                  const failureReason = status === 'undetermined' || consensusStatus === 'undetermined'
-                    ? 'Consensus undetermined by validators. Contract state was not modified.'
-                    : status.includes('timeout') || consensusStatus.includes('timeout')
-                    ? 'Transaction timed out during validator consensus.'
-                    : 'Transaction execution failed or reverted on-chain.';
-
-                  await fetch(`/api/pending-projects`, {
-                    method: 'PATCH',
-                    headers: { 
-                      'Content-Type': 'application/json',
-                      'x-wallet-address': project.submitter || ''
-                    },
-                    body: JSON.stringify({ 
-                      txHash: hash, 
-                      status: 'Failed', 
-                      reason: failureReason,
-                      caller: project.submitter
-                    })
-                  }).catch(console.error);
-
-                  activeProjects.push({ ...project, status: 'Failed', reason: failureReason });
-                } else if (status === 'finalized') {
-                  // Transaction finalized with consensus on-chain (contract state updated with Approved or Rejected)
-                  await fetch(`/api/pending-projects?txHash=${hash}&wallet=${project.submitter || ''}`, { 
-                    method: 'DELETE',
-                    headers: { 'x-wallet-address': project.submitter || '' }
-                  }).catch(console.error);
-                } else {
-                  // Still pending (e.g. ACCEPTED but not FINALIZED), keep it
-                  activeProjects.push(project);
-                }
-                continue;
-              }
-            } catch (e: any) {
-              // TransactionReceiptNotFoundError means it is still pending on chain.
-              // Fallback: If pending for > 2 minutes, assume Genlayer dropped it.
-              let isDropped = false;
-              if (project.created_at) {
-                const createdTime = new Date(project.created_at).getTime();
-                const ageInMinutes = (Date.now() - createdTime) / 1000 / 60;
-                if (ageInMinutes > 15) {
-                  console.error("Project pending for >15 minutes. Assuming dropped.");
-                  await fetch(`/api/pending-projects`, {
-                    method: 'PATCH',
-                    headers: { 
-                      'Content-Type': 'application/json',
-                      'x-wallet-address': project.submitter || ''
-                    },
-                    body: JSON.stringify({ 
-                      txHash: hash, 
-                      status: 'Failed',
-                      caller: project.submitter
-                    })
-                  }).catch(console.error);
-                  activeProjects.push({ ...project, status: 'Failed', reason: 'Project submission was dropped.' });
-                  isDropped = true;
-                }
-              }
-              
-              if (!isDropped) {
-                activeProjects.push(project);
-              }
-            }
-          } else {
-            // No hash found, just keep it
-            activeProjects.push(project);
-          }
+      for (const project of pendingProjects) {
+        if (project.status === 'Failed') {
+          activeProjects.push(project);
+          continue;
         }
 
-        return activeProjects;
-      } catch (err) {
-        console.error("Error fetching pending projects:", err);
-        return [];
+        const hash = project.txHash || (project as any).tx_hash;
+        if (hash) {
+          try {
+            const tx: any = await client.getTransaction({ hash: hash as any });
+            if (tx) {
+              const statusName = (tx.statusName || tx.status || '').toString().toUpperCase();
+              const numStatus = tx.status;
+              const leaderReceipt = tx.consensus_data?.leader_receipt;
+              const leaderObj = Array.isArray(leaderReceipt) ? leaderReceipt[0] : leaderReceipt;
+              const execResult = (leaderObj?.execution_result || tx.txExecutionResultName || '').toString().toUpperCase();
+              const txError = leaderObj?.error;
+              const resultName = (tx.resultName || '').toString().toUpperCase();
+
+              const isFailedTx =
+                statusName === 'UNDETERMINED' ||
+                statusName === 'CANCELED' ||
+                statusName === 'VALIDATORS_TIMEOUT' ||
+                statusName === 'LEADER_TIMEOUT' ||
+                numStatus === 6 || numStatus === 8 || numStatus === 12 || numStatus === 13 ||
+                resultName === 'FAILURE' ||
+                execResult.includes('ERROR') ||
+                !!txError;
+
+              if (isFailedTx) {
+                const failureReason = statusName === 'UNDETERMINED' || numStatus === 6
+                  ? 'Consensus undetermined by validators. Contract state was not modified.'
+                  : statusName.includes('TIMEOUT') || numStatus === 12 || numStatus === 13
+                  ? 'Transaction timed out during validator consensus.'
+                  : 'Transaction execution failed or reverted on-chain.';
+
+                if (address) {
+                  updatePendingProjectStatus(address, hash, 'Failed', failureReason);
+                }
+                fetch('/api/pending-projects', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json', 'x-wallet-address': project.submitter || '' },
+                  body: JSON.stringify({ txHash: hash, status: 'Failed', reason: failureReason, caller: project.submitter })
+                }).catch(() => {});
+
+                activeProjects.push({ ...project, status: 'Failed', reason: failureReason });
+              } else if (statusName === 'FINALIZED' || numStatus === 7) {
+                // Finalized on-chain! Remove from pending storage
+                if (address) {
+                  clearPendingProject(address, hash);
+                }
+                fetch(`/api/pending-projects?txHash=${hash}&wallet=${project.submitter || ''}`, {
+                  method: 'DELETE',
+                  headers: { 'x-wallet-address': project.submitter || '' }
+                }).catch(() => {});
+              } else {
+                activeProjects.push(project);
+              }
+              continue;
+            }
+          } catch (e: any) {
+            if (project.created_at) {
+              const createdTime = new Date(project.created_at).getTime();
+              const ageInMinutes = (Date.now() - createdTime) / 1000 / 60;
+              if (ageInMinutes > 15) {
+                if (address) {
+                  updatePendingProjectStatus(address, hash, 'Failed', 'Project submission timed out.');
+                }
+                activeProjects.push({ ...project, status: 'Failed', reason: 'Project submission timed out.' });
+                continue;
+              }
+            }
+            activeProjects.push(project);
+          }
+        } else {
+          activeProjects.push(project);
+        }
       }
+
+      return activeProjects;
     },
     refetchInterval: 10000,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -324,7 +352,7 @@ export function useSubmitProject() {
 
       const client = await getWriteClient();
       
-      // Send transaction (returns instantly after signing)
+      // Send transaction (returns instantly after user signs in MetaMask)
       const txHash = await client.writeContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
         functionName: "submit_project",
@@ -332,51 +360,57 @@ export function useSubmitProject() {
         value: BigInt(0),
       });
 
-      // Post to our Supabase API with wallet authentication proof
-      const res = await fetch('/api/pending-projects', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-wallet-address': address
-        },
-        body: JSON.stringify({
-          txHash,
-          submitter: address,
-          name,
-          details,
-          url,
-          amount_requested: amountRequested
-        })
-      });
+      const newProject: Project = {
+        id: 0,
+        txHash,
+        submitter: address,
+        name,
+        details,
+        url,
+        amount_requested: amountRequested,
+        status: 'Pending',
+        score: 0,
+        reason: 'Waiting for GenLayer AI Evaluation...',
+        withdrawn: false,
+        created_at: new Date().toISOString()
+      };
 
-      if (!res.ok) {
-        throw new Error("Transaction failed to save. Please try again.");
-      }
+      // 1. Immediately persist in client storage
+      savePendingProject(address, newProject);
 
-      return txHash;
-    },
-    onSuccess: (txHash, variables) => {
-      // Optimistically add the project to the pending projects cache to prevent empty state flashes
-      queryClient.setQueryData(["projects", "pending"], (old: any) => {
-        const newProject = {
-          txHash,
-          submitter: address,
-          name: variables.name,
-          details: variables.details,
-          url: variables.url,
-          amount_requested: variables.amountRequested,
-          status: 'Pending',
-          score: 0,
-          reason: 'Waiting for GenLayer AI Evaluation...',
-          withdrawn: false
-        };
-        const targetUrl = (variables.url || "").trim().toLowerCase();
-        // Remove any prior failed or pending entry for this url so it immediately moves to Pending
-        const filteredOld = Array.isArray(old) ? old.filter((p: any) => (p.url || "").trim().toLowerCase() !== targetUrl) : [];
+      // 2. Immediately seed React Query cache
+      const targetKey = getProjectIdentityKey(newProject);
+      queryClient.setQueryData(["projects", "pending", address.toLowerCase()], (old: any) => {
+        const filteredOld = Array.isArray(old) ? old.filter((p: any) => getProjectIdentityKey(p) !== targetKey) : [];
         return [newProject, ...filteredOld];
       });
 
+      // 3. Best-effort post to backend API (do NOT throw on failure!)
+      try {
+        await fetch('/api/pending-projects', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-wallet-address': address
+          },
+          body: JSON.stringify({
+            txHash,
+            submitter: address,
+            name,
+            details,
+            url,
+            amount_requested: amountRequested
+          })
+        });
+      } catch (err) {
+        console.warn("Could not sync pending project to backend API (offline):", err);
+      }
+
+      return { txHash, newProject };
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects", "pending"] });
+      queryClient.invalidateQueries({ queryKey: ["projects", "on-chain"] });
       setIsSubmitting(false);
       success("Submission Sent!", {
         description: "Your project is now Pending Review. GenLayer AI is evaluating it on-chain."
