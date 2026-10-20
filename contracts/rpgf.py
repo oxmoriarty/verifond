@@ -153,8 +153,11 @@ class RPGF(gl.Contract):
                 raise gl.vm.UserError("Failed to parse AI evaluation.")
         else:
             parsed = result
+
+        if not isinstance(parsed, dict):
+            raise gl.vm.UserError("Failed to parse AI evaluation: Invalid response format.")
             
-        if not isinstance(parsed, dict) or not parsed.get("verified"):
+        if not parsed.get("verified"):
             raise gl.vm.UserError(f"Verification failed: {parsed.get('reason', 'Wallet not found in bio')}")
             
         username = parsed.get("username", "").strip().lower()

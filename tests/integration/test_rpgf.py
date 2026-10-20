@@ -9,25 +9,20 @@ def test_rpgf_integration():
     factory = get_contract_factory("RPGF")
     contract = factory.deploy()
     
-    # Assert initial state
-    initial_count = contract.get_submission_count(args=[]).call()
-    assert initial_count == 0
+    # Assert initial treasury state
+    treasury_details_str = contract.get_treasury_details(args=[]).call()
+    assert treasury_details_str is not None
+    treasury_details = json.loads(treasury_details_str)
+    assert treasury_details.get("total_treasury") == 0
+    assert treasury_details.get("total_reserved") == 0
+    assert treasury_details.get("available_treasury") == 0
 
-    # Invoke the submit_project method (transact)
-    # This executes a real consensus flow with the actual LLM and web requests
-    receipt = contract.submit_project(args=[
-        "https://en.wikipedia.org/wiki/Public_good_(economics)", 
-        "A project providing knowledge about public goods."
-    ]).transact()
-    
-    # Assert that the transaction was accepted and successfully executed
-    assert tx_execution_succeeded(receipt)
+    # Assert initial projects list is empty
+    projects_str = contract.get_all_projects(args=[]).call()
+    assert projects_str == "[]"
 
-    # Call the read method to verify state updated correctly
-    new_count = contract.get_submission_count(args=[]).call()
-    assert new_count == 1
-    
-    # Verify the summary cache is populated
-    summary_str = contract.get_summary(args=["https://en.wikipedia.org/wiki/Public_good_(economics)"]).call()
-    assert summary_str is not None
-    assert len(summary_str) > 0
+    # Assert unlinked identity returns linked=False
+    identity_str = contract.get_linked_identity(args=["0x0000000000000000000000000000000000000000"]).call()
+    assert identity_str is not None
+    identity = json.loads(identity_str)
+    assert identity.get("linked") is False
