@@ -353,34 +353,22 @@ export default function Dashboard() {
 
               return (
                 <div className="space-y-8 animate-in fade-in duration-300">
-                  {/* Header Title & Context */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-6">
-                    <div>
-                      <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                        <Coins className="w-6 h-6 text-amber-400" />
-                        Treasury Pool & Solvency
-                      </h2>
-                      <p className="text-white/50 text-sm mt-1">
-                        Real-time on-chain tracking of VeriFund's public goods endowment, solvency reservations, and liquid allocations.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 self-start sm:self-auto bg-white/5 px-3 py-1.5 rounded-xl border border-white/10 text-xs text-white/70 font-mono">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                      On-Chain Solvency Active
-                    </div>
+                  {/* Header Title */}
+                  <div className="border-b border-white/10 pb-6">
+                    <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                      <Coins className="w-6 h-6 text-amber-400" />
+                      Treasury Pool
+                    </h2>
                   </div>
 
                   {/* 3 Sleek Metric Cards: Total Treasury, Reserved Balance, Available Balance */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                    {/* Card 1: Total Treasury Balance */}
+                    {/* Card 1: Total Treasury */}
                     <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 transition-all duration-300 hover:border-white/20 hover:bg-white/[0.07] group">
                       <div className="flex items-center justify-between mb-4">
                         <span className="text-xs font-semibold uppercase tracking-wider text-white/50 flex items-center gap-2">
                           <Wallet className="w-4 h-4 text-blue-400" />
-                          Total Treasury Balance
-                        </span>
-                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                          Total Vault
+                          Total Treasury
                         </span>
                       </div>
                       <div className="text-3xl lg:text-4xl font-black text-white tracking-tight mb-2">
@@ -391,23 +379,16 @@ export default function Dashboard() {
                         )}
                       </div>
                       <p className="text-xs text-white/40 leading-relaxed">
-                        Total funds deposited in the contract pool from donations and seed grants.
+                        Total funds deposited in the contract pool from donations.
                       </p>
-                      <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between text-xs text-white/50">
-                        <span>Contract Holdings</span>
-                        <span className="text-white/80 font-mono">100% of Base</span>
-                      </div>
                     </div>
 
-                    {/* Card 2: Reserved Treasury Balance */}
+                    {/* Card 2: Reserved Balance */}
                     <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-amber-500/20 rounded-2xl p-6 transition-all duration-300 hover:border-amber-500/40 hover:bg-amber-500/[0.04] group shadow-[0_0_25px_rgba(245,158,11,0.05)]">
                       <div className="flex items-center justify-between mb-4">
                         <span className="text-xs font-semibold uppercase tracking-wider text-amber-400/80 flex items-center gap-2">
                           <Lock className="w-4 h-4 text-amber-400" />
-                          Reserved Treasury Balance
-                        </span>
-                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                          Locked Liabilities
+                          Reserved Balance
                         </span>
                       </div>
                       <div className="text-3xl lg:text-4xl font-black text-amber-400 tracking-tight mb-2">
@@ -418,23 +399,16 @@ export default function Dashboard() {
                         )}
                       </div>
                       <p className="text-xs text-white/40 leading-relaxed">
-                        Locked and guaranteed on-chain for approved projects awaiting developer claim.
+                        Allocated for approved projects awaiting developer claim.
                       </p>
-                      <div className="mt-4 pt-4 border-t border-amber-500/10 flex items-center justify-between text-xs text-white/50">
-                        <span>Allocation Commitment</span>
-                        <span className="text-amber-400 font-mono">{reservedPercent.toFixed(1)}% of Pool</span>
-                      </div>
                     </div>
 
-                    {/* Card 3: Available Treasury Balance (Unreserved) */}
+                    {/* Card 3: Available Balance */}
                     <div className="relative overflow-hidden bg-gradient-to-br from-emerald-500/[0.08] to-teal-500/[0.03] backdrop-blur-xl border border-emerald-500/30 rounded-2xl p-6 transition-all duration-300 hover:border-emerald-500/50 hover:bg-emerald-500/[0.1] group shadow-[0_0_30px_rgba(16,185,129,0.08)]">
                       <div className="flex items-center justify-between mb-4">
                         <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400 flex items-center gap-2">
                           <Sparkles className="w-4 h-4 text-emerald-400" />
-                          Available Treasury Balance
-                        </span>
-                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                          Unreserved Pool
+                          Available Balance
                         </span>
                       </div>
                       <div className="text-3xl lg:text-4xl font-black text-emerald-400 tracking-tight mb-2">
@@ -445,12 +419,8 @@ export default function Dashboard() {
                         )}
                       </div>
                       <p className="text-xs text-emerald-100/60 leading-relaxed">
-                        Liquid, unencumbered funds ready for immediate evaluation and allocation to new projects.
+                        Available to be allocated to new projects.
                       </p>
-                      <div className="mt-4 pt-4 border-t border-emerald-500/20 flex items-center justify-between text-xs text-white/50">
-                        <span>Liquid Allocation Rate</span>
-                        <span className="text-emerald-400 font-mono font-semibold">{availablePercent.toFixed(1)}% Available</span>
-                      </div>
                     </div>
                   </div>
 
@@ -459,7 +429,7 @@ export default function Dashboard() {
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                         <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                        Pool Allocation & Solvency Breakdown
+                        Pool Allocation Breakdown
                       </h3>
                       <div className="flex items-center gap-4 text-xs font-mono">
                         <span className="flex items-center gap-1.5 text-amber-400">
@@ -489,20 +459,15 @@ export default function Dashboard() {
                     
                     <div className="flex items-center justify-between text-[11px] text-white/40">
                       <span>Total: {formatGen(totalTreasury)} GEN</span>
-                      <span>100% Solvency Backed on GenLayer</span>
                     </div>
                   </div>
 
                   {/* Donate to Public Goods Section */}
                   <div className="bg-gradient-to-br from-white/[0.07] to-white/[0.02] border border-white/10 rounded-3xl p-6 md:p-8">
                     <div className="max-w-xl mx-auto text-center space-y-4">
-                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/15 text-xs text-white/80 font-medium">
-                        <Heart className="w-3.5 h-3.5 text-rose-400 fill-rose-400" />
-                        Community Public Goods Funding
-                      </div>
-                      <h3 className="text-2xl font-bold text-white">Donate to the VeriFund Treasury</h3>
+                      <h3 className="text-2xl font-bold text-white">Donate to the Verifond Treasury</h3>
                       <p className="text-white/60 text-sm leading-relaxed">
-                        Empower open-source builders. All donated GEN tokens are transparently held in the RPGF smart contract and distributed to verified public goods via AI validator consensus.
+                        Empower open source builders. All donated GEN tokens are transparently held in a contract and distributed to verified public goods.
                       </p>
 
                       {/* Quick preset chips */}
