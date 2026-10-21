@@ -8,7 +8,7 @@ import { Navbar } from "@/components/Navbar";
 import { ProjectForm } from "@/components/ProjectForm";
 import { ProjectCard } from "@/components/ProjectCard";
 import { useProjects, usePendingProjects, useTreasury, useTreasuryDetails, useDonate, useCheckLinkedGithub, useLinkedIdentity, usePendingVerification, Project, unifyProjects } from "@/lib/hooks/useRPGF";
-import { Loader2, LayoutGrid, Globe, Coins, ShieldAlert, PlusCircle, Check, X, Github, CheckCircle2, Wallet, Lock, Sparkles, ShieldCheck, Heart } from "lucide-react";
+import { Loader2, LayoutGrid, Globe, Coins, ShieldAlert, PlusCircle, Check, X, Github, CheckCircle2, Wallet, Lock, Sparkles, ShieldCheck } from "lucide-react";
 
 export default function Dashboard() {
   const { isConnected, address, isLoading: walletLoading } = useWallet();
@@ -518,10 +518,7 @@ export default function Dashboard() {
                               <span>Confirming...</span>
                             </>
                           ) : (
-                            <>
-                              <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />
-                              <span>Donate GEN</span>
-                            </>
+                            <span>Donate GEN</span>
                           )}
                         </button>
                       </div>
